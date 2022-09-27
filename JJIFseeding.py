@@ -1,6 +1,6 @@
 '''
 
-Reads in the registaritons and makes a seeding based on the ranking list
+Reads in the registrations and makes a seeding based on the ranking list
 
 '''
 import random
@@ -35,7 +35,7 @@ class PDF(FPDF):
         # Move to the right
         self.cell(70)
         # Title
-        self.cell(30, 10, 'Mixed Team Competition','C')
+        self.cell(30, 10, 'Seeding','C')
         # Line break
         self.ln(20)
 
@@ -47,6 +47,7 @@ class PDF(FPDF):
         self.set_font('Arial', 'I', 8)
         # Page number
         self.cell(0, 10, 'Printed ' + str(datetime.now().strftime('%Y-%m-%d %H:%M:%S')) + ' Page ' + str(self.page_no()) + '/{nb}', 0, 0, 'C')
+
 
 # def read_in_catkey():
 #     ''' Read in file
@@ -69,11 +70,9 @@ def read_in_cat_rankID():
     '''
     inp_file = pd.read_csv("catID_rankID.csv", sep=',')
     rank_cat_id_out = inp_file[
-        ['cat_id', 'ranking_id']
-    ].set_index('cat_id').to_dict()['ranking_id']
+        ['cat_id', 'ranking_id']].set_index('cat_id').to_dict()['ranking_id']
 
     return rank_cat_id_out
-
 
 key_map = {
     "1466": "U21 Jiu-Jitsu Women -45 kg",
@@ -175,7 +174,6 @@ def get_athletes_cat(eventid, cat_id, user, password):
 
     uri = 'https://www.sportdata.org/ju-jitsu/rest/event/categories/'+str(eventid)+'/'+str(cat_id)+'/'
 
-
     response = requests.get(uri, auth=HTTPBasicAuth(user, password))
     d = response.json()
     df_out = json_normalize(d["members"])
@@ -225,15 +223,17 @@ def get_ranking_cat(user, password):
     return dict_ranking
 
 
-def get_ranking(rank_cat_id,user, password):
+def get_ranking(rank_cat_id, max_rank, user, password):
     """
     get the athletes form sportdata per category & export to a nice data frame
 
     Parameters
     ----------
-    cat_id
+    rank_cat_id
         sportdata category_id (from ranking) [int]
-     user
+    max
+        seeding will stop at this number [int]
+    user
         api user name
     password
         api user password    
@@ -248,49 +248,13 @@ def get_ranking(rank_cat_id,user, password):
 
     if not df_out.empty:
         df = df_out[['name', 'countrycode','rank', 'cat_id', 'id','totalpoints','cat_title']]
+        df['rank'] = df['rank'].astype(int)
+        df = df[df['rank'] < int(max_rank)]
+        df['rank'] = df['rank'].astype(str)
     else:
         # just return empty datafram
         df =pd.DataFrame()
     return df
-
-def calc_overlap(teama, teamb):
-    '''
-    Function to calc the overlap categories between the teams
-    Returns list with overlapping categorries
-
-    Parameters
-    ----------
-    teama
-        list with teamcategoreis from team A
-    teamb
-        list with teamcategoreis from team B
-    '''
-    in_first = set(teama)
-    in_second = set(teamb)
-
-    in_second_but_not_in_first = in_second - in_first
-
-    result_out = teama + list(in_second_but_not_in_first)
-
-    return result_out
-
-
-def intersection(teama, teamb):
-    '''
-    Function to calc the intersection categories between the teams
-    Returns list with intersection categorries
-    
-    Parameters
-    ----------
-    teama
-        list with teamcategoreis from team A
-    teamb
-        list with teamcategoreis from team B
-
-    '''
-    result_out_overlapp = [value for value in teama if value in teamb]
-
-    return result_out_overlapp
 
 def rev_look(val, dict):
     ''' revese lookup of key.
@@ -312,18 +276,18 @@ def draw_as_table(df):
     headerColor = 'grey'
     rowEvenColor = 'lightgrey'
     rowOddColor = 'white'
-    df["select"] = " "
+    
     fig = go.Figure(data=[go.Table(
-                    columnwidth = [10,73,37],
-                    header=dict(values=["Select", "Name", "Original Category"], # values=list(df.columns),
+                    columnwidth = [50,25,25,25],
+                    header=dict(values=["Name", "Country", "Ranking Postion", "Ranking_Points"],
                     fill_color=headerColor,
                     font = dict(family= "Arial", color = 'white', size = 12),
                     align='left'),
-                    cells=dict(values=[df.select, df.name, df.cat_name],
+                    cells=dict(values=[df.name, df.country_code, df.rank, df.totalpoints],
                         line_color='darkslategray',
                         # 2-D list of colors for alternating rows
                         fill_color = [[rowOddColor,rowEvenColor,rowOddColor, rowEvenColor,rowOddColor]*5],
-                        align = ['left', 'left'],
+                        align = ['left', 'left','left', 'left'],
                         font = dict(family= "Arial", color = 'black', size = 10)
                         ))
                     ])
@@ -342,56 +306,9 @@ def draw_as_table(df):
             pad=4
             ),
         )
-
+    
+    
     return fig
-
-def draw_as_table_teamID(df):
-
-    headerColor = 'grey'
-    rowEvenColor = 'lightgrey'
-    rowOddColor = 'white'
-    df["select"] = " "
-    fig = go.Figure(data=[go.Table(
-                    columnwidth = [10,73,37],
-                    header=dict(values=["Select", "Team Categories"],
-                    fill_color=headerColor,
-                    font = dict(family= "Arial", color = 'white', size = 12),
-                    align='left'),
-                    cells=dict(values=[df.select, df.team_cats],
-                        line_color='darkslategray',
-                        # 2-D list of colors for alternating rows
-                        fill_color = [[rowOddColor,rowEvenColor,rowOddColor, rowEvenColor,rowOddColor]*5],
-                        align = ['left', 'left'],
-                        font = dict(family= "Arial", color = 'black', size = 10)
-                        ))
-                    ])
-
-    numb_row = len(df.index)
-
-    fig.update_layout(
-        autosize=False,
-        width=600,
-        height=(numb_row+1) *25,
-        margin=dict(
-            l=20,
-            r=50,
-            b=0,
-            t=0,
-            pad=4
-            ),
-        )
-
-    return fig
-
-def confirm_text(team, give_time):
-    confirm_txt = "Please return this sheet latest at " + str((datetime.now() + timedelta(minutes = give_time)).strftime('%Y-%m-%d %H:%M')) +"\n \
-I hereby declare that the team selection is final and can not be changed anymore. \n \
-                                                                                                \n \
-                                                                                                \n \
-_______________________                             _________________________ \n \
-Confirmation Team  "+ str(team) +"                                     Confirmation OC "
-
-    return confirm_txt          
 
 st.title('Seeding')
 st.sidebar.image("https://i0.wp.com/jjeu.eu/wp-content/uploads/2018/08/jjif-logo-170.png?fit=222%2C160&ssl=1",
@@ -399,108 +316,87 @@ st.sidebar.image("https://i0.wp.com/jjeu.eu/wp-content/uploads/2018/08/jjif-logo
 
 mode = st.sidebar.selectbox('Select mode',['Top10','Top20']) 
 
+if mode == 'Top10':
+    max_rank = 10
+else:  
+    max_rank = 20
+
+
 #ID_TO_NAME = read_in_catkey()
 catID_to_rankID = read_in_cat_rankID()
 
-     
-apidata = st.checkbox("Get registration from Sportdata API", 
-                       help="Check if the registration is still open",
-                       value=True)
-if apidata is True:
-    sd_key = st.number_input("Enter the number of Sportdata event number",
-                                     help='is the number behind vernr= in the URL', value=325)
-    # create empty temporary list for catgories to merge into team categories
-    list_df_athletes = []
-    list_df_ranking = []
+sd_key = 325     
+sd_key = st.number_input("Enter the number of Sportdata event number",
+                                 help='is the number behind vernr= in the URL', value=325)
+# create empty temporary list for catgories to merge into team categories
+list_df_athletes = []
+list_df_ranking = []
+
+dict_ranking_ids = get_ranking_cat(st.secrets['user'],st.secrets['password'])
+
+my_bar = st.progress(0)
+with st.spinner('Read in data'):
+    list_df_ath = []
+    for i, key_ath in enumerate(key_map):
+        athletes_cat = get_athletes_cat(str(sd_key),
+                                     str(key_ath),
+                                     st.secrets['user'],
+                                     st.secrets['password'])
+        list_df_athletes.append(athletes_cat)
+
+        my_bar.progress(((i+1)/len(key_map))/2)
+    df_athletes = pd.concat(list_df_athletes)
+
+    df_athletes['cat_id'] = df_athletes['cat_id'].astype(int)
+    df_athletes['rank_id'] = df_athletes['cat_id'].replace(catID_to_rankID)
+    df_athletes = df_athletes.astype(str)
     
-    dict_ranking_ids = get_ranking_cat(st.secrets['user'],st.secrets['password'])
+    for j, key in enumerate(dict_ranking_ids):
+        ranking_cat = get_ranking(str(key),
+                                  max_rank,
+                                  st.secrets['user'],
+                                  st.secrets['password'])
+        list_df_ranking.append(ranking_cat)
+        my_bar.progress(0.5+((j+1)/len(dict_ranking_ids))/2)
+    df_ranking = pd.concat(list_df_ranking)
+    df_ranking['rank_id'] = df_ranking['cat_id']
+   
+df_all = pd.merge(df_athletes, df_ranking, on=['rank_id','name'])
 
-    my_bar = st.progress(0)
-    with st.spinner('Read in data'):
-        list_df_ath = []
-        for i, key_ath in enumerate(key_map):
-            athletes_cat = get_athletes_cat(str(sd_key),
-                                         str(key_ath),
-                                         st.secrets['user'],
-                                         st.secrets['password'])
-            list_df_athletes.append(athletes_cat)
+cat_list = df_all['cat_name'].to_list()
+pdf = PDF()
 
-            my_bar.progress(((i+1)/len(key_map))/2)
-        df_athletes = pd.concat(list_df_athletes)
+for k in cat_list:
 
-        df_athletes['rank_id'] = df_athletes['cat_id'].replace(catID_to_rankID)
-        
-        # df_teams = df_total[['team_id','name', 'country_code']].groupby(['team_id', 'country_code']).count().reset_index()
-        
-        for j, key in enumerate(dict_ranking_ids):
-            ranking_cat = get_ranking(str(key),
-                                       st.secrets['user'],
-                                       st.secrets['password'])
-            list_df_ranking.append(ranking_cat)
-            my_bar.progress(0.5+((j+1)/len(dict_ranking_ids))/2)
-        df_ranking = pd.concat(list_df_ranking)
-        
-       
-    st.write(df_athletes['rank_id'])
-    st.write(df_ranking)
+    pdf.add_page()
+    pdf.set_font("Arial", size = 25)
+    pdf.cell(200, 20, txt = "Seeding for Category " + k,
+          ln = 1, align = 'C')
+    pdf.alias_nb_pages()
 
+    names_seeding = df_all[['name','country_code','rank', 'totalpoints']][(df_all['cat_name'] == str(k))]
+    names_seeding.sort_values(by=['rank'])
+    st.write(k)
+    st.write(names_seeding)
 
-    df_all = pd.merge(df_athletes, df_ranking, on=['cat_id','name'])
+    pdf.cell(200, 10, txt = k,
+          ln = 2, align = 'C')
 
-    st.write(df_all)
+    # if(len(names_seeding)>0):
+    #     fig = draw_as_table(names_seeding)
+    #     png_name = str(k) + ".png"
+    #     st.write(png_name)
+    #     fig.write_image(png_name)
+    #     pdf.image(png_name) 
 
+   
+pdf.output("dummy2.pdf")  
+with open("dummy2.pdf", "rb") as pdf_file:
+    PDFbyte2 = pdf_file.read()
 
-
-
-    # pdf_sel = PDF()
-
-    # for k in teams:
-
-    #     pdf_sel.add_page()
-    #     pdf_sel.set_font("Arial", size = 25)
-    #     pdf_sel.cell(200, 20, txt = "Registration Team " + k,
-    #           ln = 1, align = 'C')
-    #     pdf_sel.alias_nb_pages()
-    #     pdf_sel.set_font("Arial", size = 15)
-    #     pdf_sel.cell(200, 10, txt = "Please select up to two athlets per category",
-    #           ln = 1, align = 'L')
-
-    #     for i in TEAMCAT_NAME_DICT:
-    #         names_sel = df_total[['name','cat_name']][(df_total['country_code'] == k) & (df_total['team_id'] == str(i))]
-    #         pdf_sel.cell(200, 10, txt = TEAMCAT_NAME_DICT[i],
-    #               ln = 2, align = 'C')
-
-    #         if(len(names_sel)>0):
-    #             fig = draw_as_table(names_sel)
-    #             png_name = str(TEAMCAT_NAME_DICT[i]) + str(k) + "sel.png"
-    #             fig.write_image(png_name)
-    #             pdf_sel.image(png_name) 
-
-
-    #     pdf_sel.alias_nb_pages()
-    #     pdf_sel.set_font("Arial", size = 12)        
-        
-    #     pdf_sel.cell(200, 6, txt = "You can add up to two athlets. A Duo team counts as one athlete",
-    #           ln = 1, align = 'L')
-    #     pdf_sel.cell(200, 15, txt = "_____________   ______________________________      _________________________",
-    #           ln = 1, align = 'L')
-    #     pdf_sel.cell(200, 6, txt = "Team Category     Name, First Name                                   Original Category",
-    #           ln = 1, align = 'L')
-    #     pdf_sel.cell(200, 15, txt = "_____________   ______________________________      _________________________",
-    #           ln = 1, align = 'L')
-    #     pdf_sel.cell(200, 6, txt = "Team Category     Name, First Name                                   Original Category",
-    #           ln = 1, align = 'L')
-    #     pdf_sel.multi_cell(200, 6, txt = confirm_text(str(k),120), align = 'L')
-
-
-    # pdf_sel.output("dummy2.pdf")  
-    # with open("dummy2.pdf", "rb") as pdf_file:
-    #     PDFbyte2 = pdf_file.read()
-
-    # st.download_button(label="Download Team  Registration lists",
-    #                    data=PDFbyte2,
-    #                    file_name='Download Teams Registration.pdf')        
-
+st.download_button(label="Download Seeding",
+                   data=PDFbyte2,
+                   file_name='Download Seeding.pdf')        
 
 
 st.sidebar.markdown('<a href="mailto:sportdirector@jjif.org">Contact for problems</a>', unsafe_allow_html=True)
