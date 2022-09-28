@@ -35,7 +35,7 @@ class PDF(FPDF):
         # Move to the right
         self.cell(70)
         # Title
-        self.cell(30, 10, 'Seeding','C')
+        #self.cell(30, 10, 'Seeding' ,'C')
         # Line break
         self.ln(20)
 
@@ -202,6 +202,30 @@ def get_athletes_cat(eventid, cat_id, user, password):
         df =pd.DataFrame()
     return df
 
+def get_event_name(eventid, user, password):
+    """
+    get the event name from sportdarta as string
+
+    Parameters
+    ----------
+    eventid
+        sportdata event_id (from database) [int]
+     user
+        api user name
+    password
+        api user password    
+    """
+
+    #URI of the rest API
+
+    uri = 'https://www.sportdata.org/ju-jitsu/rest/event/'+str(eventid)+'/'
+
+    response = requests.get(uri, auth=HTTPBasicAuth(user, password))
+    d = response.json()
+    df_out = json_normalize(d)
+    event_name = df_out['name'].astype(str)
+    return event_name
+
 
 def get_ranking_cat(user, password):
     """
@@ -248,9 +272,11 @@ def get_ranking(rank_cat_id, max_rank, user, password):
 
     if not df_out.empty:
         df = df_out[['name', 'countrycode','rank', 'cat_id', 'id','totalpoints','cat_title']]
-        df['rank'] = df['rank'].astype(int)
-        df = df[df['rank'] < int(max_rank)]
-        df['rank'] = df['rank'].astype(str)
+        # rename rank to ranking since df.rank is a function name
+        df['ranking'] = df['rank'].astype(int)
+        df = df[df['ranking'] < int(max_rank)]
+        df['ranking'] = df['ranking'].astype(str)
+
     else:
         # just return empty datafram
         df =pd.DataFrame()
@@ -278,12 +304,12 @@ def draw_as_table(df):
     rowOddColor = 'white'
     
     fig = go.Figure(data=[go.Table(
-                    columnwidth = [50,25,25,25],
-                    header=dict(values=["Name", "Country", "Ranking Postion", "Ranking_Points"],
+                    columnwidth = [15,50,24,25,25],
+                    header=dict(values=["Position", "Name", "Country", "Ranking Postion", "Ranking Points"],
                     fill_color=headerColor,
                     font = dict(family= "Arial", color = 'white', size = 12),
                     align='left'),
-                    cells=dict(values=[df.name, df.country_code, df.rank, df.totalpoints],
+                    cells=dict(values=[df.position, df.name, df.country_code, df.ranking, df.totalpoints],
                         line_color='darkslategray',
                         # 2-D list of colors for alternating rows
                         fill_color = [[rowOddColor,rowEvenColor,rowOddColor, rowEvenColor,rowOddColor]*5],
@@ -296,8 +322,8 @@ def draw_as_table(df):
 
     fig.update_layout(
         autosize=False,
-        width=600,
-        height=(numb_row+1) *25,
+        width=750,
+        height=(numb_row+1) *30,
         margin=dict(
             l=20,
             r=50,
@@ -310,7 +336,14 @@ def draw_as_table(df):
     
     return fig
 
-st.title('Seeding')
+
+sd_key = 325     
+sd_key = st.number_input("Enter the number of Sportdata event number",
+                                 help='is the number behind vernr= in the URL', value=325)
+
+tourname = get_event_name(str(sd_key), st.secrets['user'], st.secrets['password'])
+st.title('Seeding for ' +str(tourname))
+
 st.sidebar.image("https://i0.wp.com/jjeu.eu/wp-content/uploads/2018/08/jjif-logo-170.png?fit=222%2C160&ssl=1",
                  use_column_width='always')
 
@@ -325,9 +358,6 @@ else:
 #ID_TO_NAME = read_in_catkey()
 catID_to_rankID = read_in_cat_rankID()
 
-sd_key = 325     
-sd_key = st.number_input("Enter the number of Sportdata event number",
-                                 help='is the number behind vernr= in the URL', value=325)
 # create empty temporary list for catgories to merge into team categories
 list_df_athletes = []
 list_df_ranking = []
@@ -363,32 +393,32 @@ with st.spinner('Read in data'):
    
 df_all = pd.merge(df_athletes, df_ranking, on=['rank_id','name'])
 
-cat_list = df_all['cat_name'].to_list()
-pdf = PDF()
+cat_list = df_all['cat_name'].unique()
+pdf = PDF('L')
 
 for k in cat_list:
 
     pdf.add_page()
-    pdf.set_font("Arial", size = 25)
+    pdf.alias_nb_pages()
+    pdf.set_font("Arial", size = 20)
     pdf.cell(200, 20, txt = "Seeding for Category " + k,
           ln = 1, align = 'C')
-    pdf.alias_nb_pages()
+    
 
-    names_seeding = df_all[['name','country_code','rank', 'totalpoints']][(df_all['cat_name'] == str(k))]
-    names_seeding.sort_values(by=['rank'])
+    names_seeding = df_all[['name','country_code','ranking', 'totalpoints']][(df_all['cat_name'] == str(k))]
+    names_seeding['ranking'] = names_seeding['ranking'].astype(int)
+    names_seeding = names_seeding.sort_values(by=['ranking'],ascending=True)
+    names_seeding['position'] = list(range(1,len(names_seeding.index)+1))
+    names_seeding = names_seeding.astype(str)
+
     st.write(k)
     st.write(names_seeding)
 
-    pdf.cell(200, 10, txt = k,
-          ln = 2, align = 'C')
-
-    # if(len(names_seeding)>0):
-    #     fig = draw_as_table(names_seeding)
-    #     png_name = str(k) + ".png"
-    #     st.write(png_name)
-    #     fig.write_image(png_name)
-    #     pdf.image(png_name) 
-
+    if(len(names_seeding)>0):
+         fig = draw_as_table(names_seeding)
+         png_name = str(k) + ".png"
+         fig.write_image(png_name)
+         pdf.image(png_name) 
    
 pdf.output("dummy2.pdf")  
 with open("dummy2.pdf", "rb") as pdf_file:
