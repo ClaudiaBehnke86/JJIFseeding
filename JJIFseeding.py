@@ -68,7 +68,7 @@ def read_in_cat_rankID():
      Reads in a csv  and convert catergory ids to catergoy names
 
     '''
-    inp_file = pd.read_csv("catID_rankID.csv", sep=',')
+    inp_file = pd.read_csv("catID_rankID.csv", sep=';')
     rank_cat_id_out = inp_file[
         ['cat_id', 'ranking_id']].set_index('cat_id').to_dict()['ranking_id']
 
@@ -396,9 +396,14 @@ with st.spinner('Read in data'):
     df_ranking = pd.concat(list_df_ranking)
     df_ranking['rank_id'] = df_ranking['cat_id']
    
+# duo cat have no matching on name...
+#st.write(df_ranking[df_ranking['cat_title'].str.contains("DUO")])
+#st.write(df_athletes[df_athletes['cat_name'].str.contains("Duo")])
+
+cat_list = df_athletes['cat_name'].unique()
+
 df_all = pd.merge(df_athletes, df_ranking, on=['rank_id','name'])
 
-cat_list = df_all['cat_name'].unique()
 pdf = PDF('L')
 
 for k in cat_list:
@@ -409,22 +414,24 @@ for k in cat_list:
     pdf.cell(200, 20, txt = "Seeding for Category " + k,
           ln = 1, align = 'C')
     
-
     names_seeding = df_all[['name','country_code','ranking', 'totalpoints']][(df_all['cat_name'] == str(k))]
     names_seeding['ranking'] = names_seeding['ranking'].astype(int)
     names_seeding = names_seeding.sort_values(by=['ranking'],ascending=True)
     names_seeding['position'] = list(range(1,len(names_seeding.index)+1))
     names_seeding = names_seeding.astype(str)
 
-    st.write(k)
-    st.write(names_seeding)
+    st.header(k)
 
     if(len(names_seeding)>0):
-         fig = draw_as_table(names_seeding)
-         png_name = str(k) + ".png"
-         fig.write_image(png_name)
-         pdf.image(png_name) 
-   
+        st.write(names_seeding)
+        fig = draw_as_table(names_seeding)
+        png_name = str(k) + ".png"
+        fig.write_image(png_name)
+        pdf.image(png_name) 
+    else:
+        st.write("No one in Seeding")
+        pdf.cell(200, 20, txt = "No one in Seeding",
+          ln = 1, align = 'C')
 
 
 pdf.output("dummy2.pdf")  
