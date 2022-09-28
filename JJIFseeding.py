@@ -182,7 +182,10 @@ def get_athletes_cat(eventid, cat_id, user, password):
         #first idivdual categories
         if df_out['type'].str.contains('athlete').any():
             #  match to name format of Duo categories
+            df_out['last'] = df_out['last'].str.rstrip()
+            df_out['first'] = df_out['first'].str.rstrip()
             df_out['name'] = df_out['first'] + " " + df_out['last']
+
             df = df_out[['name' , 'country_code']]
             # add the origial category id
             df['cat_id'] = cat_id
@@ -193,6 +196,7 @@ def get_athletes_cat(eventid, cat_id, user, password):
             # convert club name to country using dict...
             df_out['country_code'] = df_out['club_name'].replace(CLUBNAME_COUNTRY_MAP)
             df_out['name'].replace(",", "/", regex=True, inplace=True)
+            df_out['name'] = df_out['name'].str.rstrip()
             df = df_out[['name', 'country_code']]
             df['cat_id'] = cat_id
             df['cat_name'] = df['cat_id'].replace(key_map)
@@ -271,12 +275,13 @@ def get_ranking(rank_cat_id, max_rank, user, password):
     df_out = json_normalize(d)
 
     if not df_out.empty:
+        df_out['name'] = df_out['name'].str.split('(').str[0]
+        df_out['name'] = df_out['name'].str.rstrip()
         df = df_out[['name', 'countrycode','rank', 'cat_id', 'id','totalpoints','cat_title']]
         # rename rank to ranking since df.rank is a function name
         df['ranking'] = df['rank'].astype(int)
         df = df[df['ranking'] < int(max_rank)]
         df['ranking'] = df['ranking'].astype(str)
-
     else:
         # just return empty datafram
         df =pd.DataFrame()
@@ -420,6 +425,8 @@ for k in cat_list:
          fig.write_image(png_name)
          pdf.image(png_name) 
    
+
+
 pdf.output("dummy2.pdf")  
 with open("dummy2.pdf", "rb") as pdf_file:
     PDFbyte2 = pdf_file.read()
