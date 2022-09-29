@@ -3,30 +3,24 @@
 Reads in the registrations and makes a seeding based on the ranking list
 
 '''
-import random
+from datetime import datetime
+import os
+from pandas import json_normalize
+from fpdf import FPDF
+
 import streamlit as st
 import plotly.graph_objects as go
 
 import requests
-import json
-import plotly.express as px
 from requests.auth import HTTPBasicAuth
-import pandas as pd 
+import pandas as pd
 pd.options.mode.chained_assignment = None  # default='warn'
 
-from datetime import datetime
-from datetime import timedelta
-
-from pandas import json_normalize
-from fpdf import FPDF
-from fpdf import Template
-
-import base64
-
-import matplotlib.pyplot as plt
-from matplotlib.backends.backend_pdf import PdfPages
 
 class PDF(FPDF):
+    '''
+    overwrites the pdf settings
+    '''
     def header(self):
         # Logo
         self.image('Logo_real.png', 8, 8, 30)
@@ -35,7 +29,7 @@ class PDF(FPDF):
         # Move to the right
         self.cell(70)
         # Title
-        #self.cell(30, 10, 'Seeding' ,'C')
+        # self.cell(30, 10, 'Seeding' ,'C')
         # Line break
         self.ln(20)
 
@@ -46,23 +40,12 @@ class PDF(FPDF):
         # Arial italic 8
         self.set_font('Arial', 'I', 8)
         # Page number
-        self.cell(0, 10, 'Printed ' + str(datetime.now().strftime('%Y-%m-%d %H:%M:%S')) + ' Page ' + str(self.page_no()) + '/{nb}', 0, 0, 'C')
+        now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        self.cell(0, 10, 'Printed ' + str(now) + ' Page ' +
+                  str(self.page_no()) + '/{nb}', 0, 0, 'C')
 
 
-# def read_in_catkey():
-#     ''' Read in file
-#      - HELPER FUNCTION
-#      Reads in a csv  and convert catergory ids to catergoy names
-
-#     '''
-#     inp_file = pd.read_csv("catID_name.csv", sep=';')
-#     key_map = inp_file[
-#         ['cat_id', 'name']
-#     ].set_index('cat_id').to_dict()['name']
-
-#     return key_map
-
-def read_in_cat_rankID():
+def read_in_cat_rankid():
     ''' Read in file
      - HELPER FUNCTION
      Reads in a csv  and convert catergory ids to catergoy names
@@ -73,6 +56,11 @@ def read_in_cat_rankID():
         ['cat_id', 'ranking_id']].set_index('cat_id').to_dict()['ranking_id']
 
     return rank_cat_id_out
+
+
+# uri of sportdataAPI
+BASEURI = "https://www.sportdata.org/ju-jitsu/rest/"
+
 
 key_map = {
     "1466": "U21 Jiu-Jitsu Women -45 kg",
@@ -146,12 +134,15 @@ key_map = {
     }
 
 
-#  since teams categories have no country I use this quick and dirty workaround
-#  to map clubnames in sportdata api to country codes... 
+# since teams categories have no country I use this quick and dirty workaround
+# to map clubnames in sportdata api to country codes...
 CLUBNAME_COUNTRY_MAP = {"Belgian Ju-Jitsu Federation": 'BEL',
                         "Deutscher Ju-Jitsu Verband e.V.": 'GER',
                         "Federazione Ju Jitsu Italia": 'ITA',
-                        "Romanian Martial Arts Federation": 'ROU'}
+                        "Romanian Martial Arts Federation": 'ROU',
+                        "Österreichischer Jiu Jitsu Verband": 'AUT',
+                        "Taiwan Ju Jitsu Federation": 'TPE'
+                        }
 
 
 def get_athletes_cat(eventid, cat_id, user, password):
@@ -167,44 +158,43 @@ def get_athletes_cat(eventid, cat_id, user, password):
      user
         api user name
     password
-        api user password    
+        api user password
     """
 
-    #URI of the rest API
+    # URI of the rest API
+    uri = str(BASEURI)+'event/categories/'+str(eventid)+'/'+str(cat_id)+'/'
 
-    uri = 'https://www.sportdata.org/ju-jitsu/rest/event/categories/'+str(eventid)+'/'+str(cat_id)+'/'
-
-    response = requests.get(uri, auth=HTTPBasicAuth(user, password))
-    d = response.json()
-    df_out = json_normalize(d["members"])
+    response = requests.get(uri, auth=HTTPBasicAuth(user, password), timeout=5)
+    d_in = response.json()
+    df_out = json_normalize(d_in["members"])
 
     if not df_out.empty:
-        #first idivdual categories
+        # first idivdual categories
         if df_out['type'].str.contains('athlete').any():
             #  match to name format of Duo categories
             df_out['last'] = df_out['last'].str.rstrip()
             df_out['first'] = df_out['first'].str.rstrip()
             df_out['name'] = df_out['first'] + " " + df_out['last']
-
-            df = df_out[['name' , 'country_code']]
+            df_ath = df_out[['name', 'country_code']]
             # add the origial category id
-            df['cat_id'] = cat_id
-            df['cat_name'] = df['cat_id'].replace(key_map)
-            df = df.astype(str)
+            df_ath['cat_id'] = cat_id
+            df_ath['cat_name'] = df_ath['cat_id'].replace(key_map)
+            df_ath = df_ath.astype(str)
         else:
             # for an unclear reason teams to no have a country code...
             # convert club name to country using dict...
             df_out['country_code'] = df_out['club_name'].replace(CLUBNAME_COUNTRY_MAP)
             df_out['name'].replace(",", "/", regex=True, inplace=True)
             df_out['name'] = df_out['name'].str.rstrip()
-            df = df_out[['name', 'country_code']]
-            df['cat_id'] = cat_id
-            df['cat_name'] = df['cat_id'].replace(key_map)
-            df = df.astype(str)
+            df_ath = df_out[['name', 'country_code']]
+            df_ath['cat_id'] = cat_id
+            df_ath['cat_name'] = df_ath['cat_id'].replace(key_map)
+            df_ath = df_ath.astype(str)
     else:
         # just return empty datafram
-        df =pd.DataFrame()
-    return df
+        df_ath = pd.DataFrame()
+    return df_ath
+
 
 def get_event_name(eventid, user, password):
     """
@@ -217,41 +207,39 @@ def get_event_name(eventid, user, password):
      user
         api user name
     password
-        api user password    
+        api user password
     """
 
-    #URI of the rest API
+    # URI of the rest API
+    uri = str(BASEURI)+'/event/'+str(eventid)+'/'
 
-    uri = 'https://www.sportdata.org/ju-jitsu/rest/event/'+str(eventid)+'/'
-
-    response = requests.get(uri, auth=HTTPBasicAuth(user, password))
-    d = response.json()
-    df_out = json_normalize(d)
+    response = requests.get(uri, auth=HTTPBasicAuth(user, password), timeout=5)
+    d_in = response.json()
+    df_out = json_normalize(d_in)
     event_name = df_out['name'].astype(str)
     return event_name
 
 
 def get_ranking_cat(user, password):
     """
-    ranking has differnet category ids... 
-   
+    ranking has differnet category ids...
+    so get a dict with them
     """
 
-    #URI of the rest API
-    uri = 'https://www.sportdata.org/ju-jitsu/rest/ranking/categories/'
+    # URI of the rest API
+    uri = str(BASEURI)+'/ranking/categories/'
 
-    response = requests.get(uri, auth=HTTPBasicAuth(user, password))
-    d = response.json()
-    df = json_normalize(d)
-    
-    df = df.drop(['cat_sex', 'cat_isteam'], axis=1)
-    df = df.set_index('cat_id')
-    my_series = df['cat_title'].squeeze()
+    response = requests.get(uri, auth=HTTPBasicAuth(user, password), timeout=5)
+    d_in = response.json()
+    df_rankcats = json_normalize(d_in)
+    df_rankcats = df_rankcats.drop(['cat_sex', 'cat_isteam'], axis=1)
+    df_rankcats = df_rankcats.set_index('cat_id')
+    my_series = df_rankcats['cat_title'].squeeze()
     dict_ranking = my_series.to_dict()
     return dict_ranking
 
 
-def get_ranking(rank_cat_id, max_rank, user, password):
+def get_ranking(rank_cat_id, max_rank_pos, user, password):
     """
     get the athletes form sportdata per category & export to a nice data frame
 
@@ -259,35 +247,36 @@ def get_ranking(rank_cat_id, max_rank, user, password):
     ----------
     rank_cat_id
         sportdata category_id (from ranking) [int]
-    max
+    MAX_RANK_pos
         seeding will stop at this number [int]
     user
         api user name
     password
-        api user password    
+        api user password
     """
 
-    #URI of the rest API
-    uri = 'https://www.sportdata.org/ju-jitsu/rest/ranking/category/'+ str(rank_cat_id)+'/'
+    # URI of the rest API
+    uri = str(BASEURI)+'/ranking/category/'+str(rank_cat_id)+'/'
 
-    response = requests.get(uri, auth=HTTPBasicAuth(user, password))
-    d = response.json()
-    df_out = json_normalize(d)
+    response = requests.get(uri, auth=HTTPBasicAuth(user, password), timeout=5)
+    d_in = response.json()
+    df_out = json_normalize(d_in)
 
     if not df_out.empty:
         df_out['name'] = df_out['name'].str.split('(').str[0]
         df_out['name'] = df_out['name'].str.rstrip()
-        df = df_out[['name', 'countrycode','rank', 'cat_id', 'id','totalpoints','cat_title']]
+        df_rank = df_out[['name', 'countrycode', 'rank', 'cat_id', 'totalpoints', 'cat_title']]
         # rename rank to ranking since df.rank is a function name
-        df['ranking'] = df['rank'].astype(int)
-        df = df[df['ranking'] < int(max_rank)]
-        df['ranking'] = df['ranking'].astype(str)
+        df_rank['ranking'] = df_rank['rank'].astype(int)
+        df_rank = df_rank[df_rank['ranking'] < int(max_rank_pos)]
+        df_rank['ranking'] = df_rank['ranking'].astype(str)
     else:
         # just return empty datafram
-        df =pd.DataFrame()
-    return df
+        df_rank = pd.DataFrame()
+    return df_rank
 
-def rev_look(val, dict):
+
+def rev_look(val_in, dict_in):
     ''' revese lookup of key.
     Returns first matching key
     Parameters
@@ -298,37 +287,47 @@ def rev_look(val, dict):
         dict that contains the keys and value
 
     '''
-    key = next(key for key, value in dict.items() if value == val)
+    key_out = next(key for key, value in dict_in.items() if value == val_in)
 
-    return key
+    return key_out
 
-def draw_as_table(df):
 
-    headerColor = 'grey'
-    rowEvenColor = 'lightgrey'
-    rowOddColor = 'white'
-    
-    fig = go.Figure(data=[go.Table(
-                    columnwidth = [15,50,24,25,25],
-                    header=dict(values=["Position", "Name", "Country", "Ranking Postion", "Ranking Points"],
-                    fill_color=headerColor,
-                    font = dict(family= "Arial", color = 'white', size = 12),
-                    align='left'),
-                    cells=dict(values=[df.position, df.name, df.country_code, df.ranking, df.totalpoints],
-                        line_color='darkslategray',
-                        # 2-D list of colors for alternating rows
-                        fill_color = [[rowOddColor,rowEvenColor,rowOddColor, rowEvenColor,rowOddColor]*5],
-                        align = ['left', 'left','left', 'left'],
-                        font = dict(family= "Arial", color = 'black', size = 10)
-                        ))
-                    ])
+def draw_as_table(df_in):
+    ''' draws a dataframe as a table and then as a fig.
+    Parameters
+    ----------
+    val
+        value to be looked up
+    dict
+        dict that contains the keys and value
 
-    numb_row = len(df.index)
+    '''
 
-    fig.update_layout(
+    header_color = 'grey'
+    row_even_color = 'lightgrey'
+    row_odd_color = 'white'
+
+    fig_out = go.Figure(data=[go.Table(
+                        columnwidth=[15, 50, 24, 25, 25],
+                        header=dict(values=["Position", "Name", "Country", "Ranking Postion", "Ranking Points"],
+                                    fill_color=header_color,
+                                    font=dict(family="Arial", color='white', size=12),
+                                    align='left'),
+                        cells=dict(values=[df_in.position, df_in.name, df_in.country_code, df_in.ranking, df_in.totalpoints],
+                                   line_color='darkslategray',
+                                   # 2-D list of colors for alternating rows
+                                   fill_color=[[row_odd_color, row_even_color, row_odd_color, row_even_color, row_odd_color]*5],
+                                   align=['left', 'left', 'left', 'left', 'left'],
+                                   font=dict(family="Arial", color='black', size=10)
+                                   ))
+                        ])
+
+    numb_row = len(df_in.index)
+
+    fig_out.update_layout(
         autosize=False,
         width=750,
-        height=(numb_row+1) *30,
+        height=(numb_row+1) * 30,
         margin=dict(
             l=20,
             r=50,
@@ -337,46 +336,45 @@ def draw_as_table(df):
             pad=4
             ),
         )
-    
-    
-    return fig
+
+    return fig_out
 
 
-sd_key = 325     
-sd_key = st.number_input("Enter the number of Sportdata event number",
-                                 help='is the number behind vernr= in the URL', value=325)
+# main progreamm starts here
+sd_key = st.number_input("Enter the Sportdata event number",
+                         help='the number behind vernr= in the URL', value=325)
 
 tourname = get_event_name(str(sd_key), st.secrets['user'], st.secrets['password'])
-st.title('Seeding for ' +str(tourname))
+
+st.title('Seeding for ' + str(tourname))
 
 st.sidebar.image("https://i0.wp.com/jjeu.eu/wp-content/uploads/2018/08/jjif-logo-170.png?fit=222%2C160&ssl=1",
                  use_column_width='always')
 
-mode = st.sidebar.selectbox('Select mode',['Top10','Top20']) 
+mode = st.sidebar.selectbox('Select mode', ['Top10', 'Top20'])
 
 if mode == 'Top10':
-    max_rank = 10
-else:  
-    max_rank = 20
+    MAX_RANK = 10
+else:
+    MAX_RANK = 20
 
-
-#ID_TO_NAME = read_in_catkey()
-catID_to_rankID = read_in_cat_rankID()
+# ID_TO_NAME = read_in_catkey()
+catID_to_rankID = read_in_cat_rankid()
 
 # create empty temporary list for catgories to merge into team categories
 list_df_athletes = []
 list_df_ranking = []
 
-dict_ranking_ids = get_ranking_cat(st.secrets['user'],st.secrets['password'])
+dict_ranking_ids = get_ranking_cat(st.secrets['user'], st.secrets['password'])
 
 my_bar = st.progress(0)
 with st.spinner('Read in data'):
     list_df_ath = []
     for i, key_ath in enumerate(key_map):
         athletes_cat = get_athletes_cat(str(sd_key),
-                                     str(key_ath),
-                                     st.secrets['user'],
-                                     st.secrets['password'])
+                                        str(key_ath),
+                                        st.secrets['user'],
+                                        st.secrets['password'])
         list_df_athletes.append(athletes_cat)
 
         my_bar.progress(((i+1)/len(key_map))/2)
@@ -385,66 +383,67 @@ with st.spinner('Read in data'):
     df_athletes['cat_id'] = df_athletes['cat_id'].astype(int)
     df_athletes['rank_id'] = df_athletes['cat_id'].replace(catID_to_rankID)
     df_athletes = df_athletes.astype(str)
-    
+
     for j, key in enumerate(dict_ranking_ids):
         ranking_cat = get_ranking(str(key),
-                                  max_rank,
+                                  MAX_RANK,
                                   st.secrets['user'],
                                   st.secrets['password'])
         list_df_ranking.append(ranking_cat)
         my_bar.progress(0.5+((j+1)/len(dict_ranking_ids))/2)
     df_ranking = pd.concat(list_df_ranking)
     df_ranking['rank_id'] = df_ranking['cat_id']
-   
-# duo cat have no matching on name...
-#st.write(df_ranking[df_ranking['cat_title'].str.contains("DUO")])
-#st.write(df_athletes[df_athletes['cat_name'].str.contains("Duo")])
 
+
+# duo cat have no matching on name...need to fix this
+# st.write(df_ranking[df_ranking['cat_title'].str.contains("DUO")])
+# st.write(df_athletes[df_athletes['cat_name'].str.contains("Duo")])
+
+# get all the categories that are registered
 cat_list = df_athletes['cat_name'].unique()
 
-df_all = pd.merge(df_athletes, df_ranking, on=['rank_id','name'])
+df_all = pd.merge(df_athletes, df_ranking, on=['rank_id', 'name'])
 
+# new pdf in landscape
 pdf = PDF('L')
 
 for k in cat_list:
-
     pdf.add_page()
     pdf.alias_nb_pages()
-    pdf.set_font("Arial", size = 20)
-    pdf.cell(200, 20, txt = "Seeding for Category " + k,
-          ln = 1, align = 'C')
-    
-    names_seeding = df_all[['name','country_code','ranking', 'totalpoints']][(df_all['cat_name'] == str(k))]
+    pdf.set_font("Arial", size=20)
+    pdf.cell(200, 20, txt="Seeding for Category " + k, ln=1, align='C')
+
+    names_seeding = df_all[['name', 'country_code', 'ranking', 'totalpoints']][(df_all['cat_name'] == str(k))]
     names_seeding['ranking'] = names_seeding['ranking'].astype(int)
-    names_seeding = names_seeding.sort_values(by=['ranking'],ascending=True)
-    names_seeding['position'] = list(range(1,len(names_seeding.index)+1))
+    names_seeding = names_seeding.sort_values(by=['ranking'], ascending=True)
+    names_seeding['position'] = list(range(1, len(names_seeding.index)+1))
     names_seeding = names_seeding.astype(str)
 
     st.header(k)
-
-    if(len(names_seeding)>0):
+    if len(names_seeding) > 0:
         st.write(names_seeding)
         fig = draw_as_table(names_seeding)
-        png_name = str(k) + ".png"
-        fig.write_image(png_name)
-        pdf.image(png_name) 
+        PNG_NAME = str(k) + ".png"
+        fig.write_image(PNG_NAME)
+        pdf.image(PNG_NAME)
+        os.remove(PNG_NAME)
     else:
         st.write("No one in Seeding")
-        pdf.cell(200, 20, txt = "No one in Seeding",
-          ln = 1, align = 'C')
+        pdf.set_font("Arial", size=15)
+        pdf.cell(200, 20, txt="No one in Seeding", ln=1, align='L')
 
 
-pdf.output("dummy2.pdf")  
+pdf.output("dummy2.pdf")
 with open("dummy2.pdf", "rb") as pdf_file:
     PDFbyte2 = pdf_file.read()
 
 st.download_button(label="Download Seeding",
                    data=PDFbyte2,
-                   file_name='Download Seeding.pdf')        
+                   file_name='Download Seeding.pdf')
+os.remove("dummy2.pdf")
 
 
 st.sidebar.markdown('<a href="mailto:sportdirector@jjif.org">Contact for problems</a>', unsafe_allow_html=True)
 
 LINK = '[Click here for the source code](https://github.com/ClaudiaBehnke86/JJIFseeding)'
 st.markdown(LINK, unsafe_allow_html=True)
-
