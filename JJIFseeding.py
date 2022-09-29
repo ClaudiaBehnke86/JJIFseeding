@@ -39,7 +39,7 @@ class PDF(FPDF):
         self.set_y(-15)
         # Arial italic 8
         self.set_font('Arial', 'I', 8)
-        # Page number
+        # Page number & printing date
         now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
         self.cell(0, 10, 'Printed ' + str(now) + ' Page ' +
                   str(self.page_no()) + '/{nb}', 0, 0, 'C')
@@ -316,7 +316,7 @@ def draw_as_table(df_in):
                         cells=dict(values=[df_in.position, df_in.name, df_in.country_code, df_in.ranking, df_in.totalpoints],
                                    line_color='darkslategray',
                                    # 2-D list of colors for alternating rows
-                                   fill_color=[[row_odd_color, row_even_color, row_odd_color, row_even_color, row_odd_color]*5],
+                                   fill_color=[[row_odd_color, row_even_color]*2],
                                    align=['left', 'left', 'left', 'left', 'left'],
                                    font=dict(family="Arial", color='black', size=10)
                                    ))
@@ -417,6 +417,9 @@ for k in cat_list:
     names_seeding['ranking'] = names_seeding['ranking'].astype(int)
     names_seeding = names_seeding.sort_values(by=['ranking'], ascending=True)
     names_seeding['position'] = list(range(1, len(names_seeding.index)+1))
+
+    # remove more than 4 seeded people
+    names_seeding = names_seeding[names_seeding['position'] < 5]
     names_seeding = names_seeding.astype(str)
 
     st.header(k)
