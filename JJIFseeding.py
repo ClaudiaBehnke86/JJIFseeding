@@ -3,8 +3,10 @@
 Reads in the registrations and makes a seeding based on the ranking list
 
 '''
+import numpy as np
 from datetime import datetime
 import os
+import re
 from pandas import json_normalize
 from fpdf import FPDF
 
@@ -16,11 +18,22 @@ from requests.auth import HTTPBasicAuth
 import pandas as pd
 pd.options.mode.chained_assignment = None  # default='warn'
 
+# for the name matching
+from sklearn.feature_extraction.text import TfidfVectorizer
+from scipy.sparse import csr_matrix
+import sparse_dot_topn.sparse_dot_topn as ct  # Leading Juice for us
 
 class PDF(FPDF):
     '''
     overwrites the pdf settings
     '''
+
+    def __init__(self, orientation, tourname):
+        # initialize attributes of parent class
+        super().__init__(orientation)
+        # initialize class attributes
+        self.tourname = tourname
+
     def header(self):
         # Logo
         self.image('Logo_real.png', 8, 8, 30)
@@ -29,7 +42,7 @@ class PDF(FPDF):
         # Move to the right
         self.cell(70)
         # Title
-        # self.cell(30, 10, 'Seeding' ,'C')
+        self.cell(30, 10, 'Seeding ' + self.tourname, 'C')
         # Line break
         self.ln(20)
 
@@ -145,6 +158,88 @@ CLUBNAME_COUNTRY_MAP = {"Belgian Ju-Jitsu Federation": 'BEL',
                         }
 
 
+def ngrams(string, n_gr=3):
+    '''
+    Function from name comparison
+    'https://towardsdatascience.com/surprisingly-effective-way-to-name-matching-in-python-1a67328e670e'
+
+    used to check for similar names
+    Parameters
+    ----------
+    string
+        input string
+    n_gr
+        ?
+
+    '''
+    string = re.sub(r'[,-./]|\sBD',r'', string)
+    ngrams_in = zip(*[string[i:] for i in range(n_gr)])
+    return [''.join(ngram_in) for ngram_in in ngrams_in]
+
+
+def awesome_cossim_top(A, B, ntop, lower_bound=0):
+    '''
+    Function from name comparison
+    'https://towardsdatascience.com/surprisingly-effective-way-to-name-matching-in-python-1a67328e670e'
+
+    force A and B as a CSR matrix.
+    If they have already been CSR, there is no overhead'''
+    A = A.tocsr()
+    B = B.tocsr()
+    M, _ = A.shape
+    _, N = B.shape
+
+    idx_dtype = np.int32
+
+    nnz_max = M*ntop
+
+    indptr = np.zeros(M+1, dtype=idx_dtype)
+    indices = np.zeros(nnz_max, dtype=idx_dtype)
+    data = np.zeros(nnz_max, dtype=A.dtype)
+    ct.sparse_dot_topn(
+        M, N, np.asarray(A.indptr, dtype=idx_dtype),
+        np.asarray(A.indices, dtype=idx_dtype),
+        A.data,
+        np.asarray(B.indptr, dtype=idx_dtype),
+        np.asarray(B.indices, dtype=idx_dtype),
+        B.data,
+        ntop,
+        lower_bound,
+        indptr, indices, data)
+    return csr_matrix((data, indices, indptr), shape=(M, N))
+
+
+def get_matches_df(sparse_matrix, name_vector, top=100):
+    '''
+    Function from name comparison
+    'https://towardsdatascience.com/surprisingly-effective-way-to-name-matching-in-python-1a67328e670e'
+
+    unpacks the resulting sparse matrix
+    '''
+    non_zeros = sparse_matrix.nonzero()
+
+    sparserows = non_zeros[0]
+    sparsecols = non_zeros[1]
+
+    if sparsecols.size > top:
+        nr_matches = top
+    else:
+        nr_matches = sparsecols.size
+
+    left_side = np.empty([nr_matches], dtype=object)
+    right_side = np.empty([nr_matches], dtype=object)
+    similarity_in = np.zeros(nr_matches)
+
+    for index in range(0, nr_matches):
+        left_side[index] = name_vector[sparserows[index]]
+        right_side[index] = name_vector[sparsecols[index]]
+        similarity_in[index] = sparse_matrix.data[index]
+
+    return pd.DataFrame({'left_side': left_side,
+                         'right_side': right_side,
+                         'similarity': similarity_in})
+
+
 def get_athletes_cat(eventid, cat_id, user, password):
     """
     get the athletes form sportdata per category & export to a nice data frame
@@ -216,7 +311,7 @@ def get_event_name(eventid, user, password):
     response = requests.get(uri, auth=HTTPBasicAuth(user, password), timeout=5)
     d_in = response.json()
     df_out = json_normalize(d_in)
-    event_name = df_out['name'].astype(str)
+    event_name = df_out['name'].astype(str)[0]
     return event_name
 
 
@@ -340,13 +435,13 @@ def draw_as_table(df_in):
     return fig_out
 
 
-# main progreamm starts here
+# main program starts here
 sd_key = st.number_input("Enter the Sportdata event number",
                          help='the number behind vernr= in the URL', value=325)
 
 tourname = get_event_name(str(sd_key), st.secrets['user'], st.secrets['password'])
 
-st.title('Seeding for ' + str(tourname))
+st.title('Seeding for ' + tourname)
 
 st.sidebar.image("https://i0.wp.com/jjeu.eu/wp-content/uploads/2018/08/jjif-logo-170.png?fit=222%2C160&ssl=1",
                  use_column_width='always')
@@ -361,7 +456,7 @@ else:
 # ID_TO_NAME = read_in_catkey()
 catID_to_rankID = read_in_cat_rankid()
 
-# create empty temporary list for catgories to merge into team categories
+# create empty temporary list for categories to merge into team categories
 list_df_athletes = []
 list_df_ranking = []
 
@@ -385,6 +480,7 @@ with st.spinner('Read in data'):
     df_athletes = df_athletes.astype(str)
 
     for j, key in enumerate(dict_ranking_ids):
+        # FIXME only read in rankings associated to the df_athletes
         ranking_cat = get_ranking(str(key),
                                   MAX_RANK,
                                   st.secrets['user'],
@@ -399,13 +495,116 @@ with st.spinner('Read in data'):
 # st.write(df_ranking[df_ranking['cat_title'].str.contains("DUO")])
 # st.write(df_athletes[df_athletes['cat_name'].str.contains("Duo")])
 
+vectorizer = TfidfVectorizer(min_df=1, analyzer=ngrams)
+
 # get all the categories that are registered
-cat_list = df_athletes['cat_name'].unique()
+cat_list = df_athletes['rank_id'].unique()
+
+
+# loop over all ranks to match
+for cat in cat_list:
+    # get the names of from leading dataframe (athletes) and ranking frame
+    names_athletes = df_athletes[df_athletes['rank_id'] == cat]['name']
+    names_ranking = df_ranking[df_ranking['rank_id'] == cat]['name']
+    # skip category if empty
+    if len(names_athletes) < 1:
+        continue
+    # combine the two lists of names into one list
+    all_names = pd.concat([names_athletes, names_ranking]).values
+    # perform matching over combined name list
+    matrix = vectorizer.fit_transform(all_names)
+    if len(all_names) > 4:
+        matrix = awesome_cossim_top(matrix, matrix.transpose(), 10, .4)
+    else:
+        matrix = awesome_cossim_top(matrix, matrix.transpose(), 4, .4)
+    # create a dataframe with the matches
+    df_matches = get_matches_df(matrix, all_names)
+    # remove self-mapping of names (exact matches)
+    df_matches = df_matches[
+        (df_matches["similarity"] < .99999999) & (
+            df_matches["similarity"] > .4)
+    ]
+    # create mapping dictionary for names
+    dict_map = dict(zip(df_matches.left_side, df_matches.right_side))
+    # if approximate matches are found, replace the names
+    if len(dict_map) > 0:
+        # drop all keys in the mapping dict that do not have a value
+        # that appears in the athletes names. by doing this, you
+        # avoid replacing names in the ranking list with other names
+        # in the ranking list, which would potentially lead to mis-
+        # matches with athlete names
+        slim_dict = {key: value for key,
+            value in dict_map.items() if value in df_athletes[
+                df_athletes['rank_id'] == cat
+            ]['name'].values
+        }
+
+        # replace names in the ranking data
+        df_ranking.loc[
+            df_ranking['rank_id'] == cat,
+            'name'
+        ] = df_ranking[df_ranking['rank_id']==cat]['name'].replace(slim_dict)
 
 df_all = pd.merge(df_athletes, df_ranking, on=['rank_id', 'name'])
+#df_all = pd.merge(df_athletes, df_ranking, on=['rank_id', 'name'], how='outer')
+
+#df_all = pd.concat([df_athletes, df_ranking], on=['rank_id'])
+st.write(df_all)
+import pdb; pdb.set_trace()
+# loop over all categories
+#vectorizer = TfidfVectorizer(min_df=1, analyzer=ngrams)
+
+
+# with st.expander('Details on name matching', expanded=False):
+#     st.write('Similar names were matched to avoid double counting. This is based on:')
+#     st.write('https://towardsdatascience.com/surprisingly-effective-way-to-name-matching-in-python-1a67328e670e')
+#     similarity = st.number_input('similarity', min_value=0.4,
+#                                  max_value=0.9, value=0.6,
+#                                  help="small number means more matches, high number only exact matches"
+#                                  )
+
+# # create empty temporary list for events to fix names
+# list_df_new = []
+
+# for i, val in enumerate(cat_list):
+#     df_new = df_all[df_all['cat_name'].str.contains(str(val))]
+
+#     # re-index the names column to continuous index starting at
+#     names_types = pd.Series(df_new['name'].values)
+
+#     if len(names_types) > 1:
+#         tf_idf_matrix = vectorizer.fit_transform(names_types)
+#         if len(names_types) > 4:
+#             matches = awesome_cossim_top(tf_idf_matrix,
+#                                          tf_idf_matrix.transpose(),
+#                                          10, 0.4)
+#         else:
+#             matches = awesome_cossim_top(tf_idf_matrix,
+#                                          tf_idf_matrix.transpose(),
+#                                          4, 0.4)
+#         # store the  matches into new dataframe called matched_df
+#         matches_df = get_matches_df(matches, names_types, top=200)
+#         # For removing all exact matches
+#         matches_df = matches_df[matches_df['similarity'] < 0.99999]
+#         # create a mapping between names in form of a dict
+#         matches_df = matches_df[matches_df['similarity'] > similarity]
+#         dict_map = dict(zip(matches_df.left_side, matches_df.right_side))
+#         df_new.loc[:, 'name'] = df_new['name'].replace(dict_map)
+
+#         list_df_new.append(df_new)
+#         if len(dict_map) > 0:
+#             print('fixing ' + str(len(dict_map)) + ' issues with names')
+
+# # overwrite existing df_ini with events with name issues fixed
+# df_ini = pd.concat(list_df_new)
+
+
+
+
+
 
 # new pdf in landscape
-pdf = PDF('L')
+pdf = PDF('L', tourname)
 
 for k in cat_list:
     pdf.add_page()
