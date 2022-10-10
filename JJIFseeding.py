@@ -612,16 +612,22 @@ for k in cat_list_str:
     names_seeding = names_seeding.sort_values(by=['ranking'], ascending=True)
     names_seeding['position'] = list(range(1, len(names_seeding.index)+1))
 
+    # move positions to first column
+    cols = names_seeding.columns.tolist()
+    cols = cols[-1:] + cols[:-1]
+    names_seeding = names_seeding[cols]
+
     # remove more than 4 seeded people
     names_seeding = names_seeding[names_seeding['position'] < 5]
     names_seeding = names_seeding.astype(str)
 
     st.header(k)
     if len(names_seeding) > 0:
-        st.write(names_seeding)
-
-        if not names_seeding[names_seeding["similarity"].astype(float) < 1.0].empty:
+        if names_seeding[names_seeding["similarity"].astype(float) < 1.0].empty:
+            st.write(names_seeding[['name', 'country_code', 'ranking', 'totalpoints']])
+        else:
             st.warning('There are non exact matches, check names and original_name', icon="⚠️")
+            st.write(names_seeding)
             pdf.cell(200, 20, txt='!!! There are non exact matches, check names in event and ranking', ln=1, align='C')
         fig = draw_as_table(names_seeding)
         PNG_NAME = str(k) + ".png"
