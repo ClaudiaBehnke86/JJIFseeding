@@ -5,3 +5,5 @@ streamlit
 kaleido
 matplotlib
 fpdf2
+sklearn
+sparse_dot_topn
