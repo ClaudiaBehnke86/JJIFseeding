@@ -153,8 +153,16 @@ CLUBNAME_COUNTRY_MAP = {"Belgian Ju-Jitsu Federation": 'BEL',
                         "Deutscher Ju-Jitsu Verband e.V.": 'GER',
                         "Federazione Ju Jitsu Italia": 'ITA',
                         "Romanian Martial Arts Federation": 'ROU',
-                        "Österreichischer Jiu Jitsu Verband": 'AUT',
-                        "Taiwan Ju Jitsu Federation": 'TPE'
+                        "Österreichischer Jiu Jitsu Verband": "AUT",
+                        "Taiwan Ju Jitsu Federation": "TPE",
+                        "Royal Spain Ju Jutsi Federation": 'ESP',
+                        "Federation Française de Judo, Jujitsu, Kendo et DA": 'FRA',
+                        "Pakistan Ju-Jitsu Federation": 'PAK',
+                        "Vietnam Jujitsu Federation": 'VIE',
+                        "Ju-Jitsu Federation of Slovenia": 'SLO',
+                        "Hellenic Ju-Jitsu Federation": 'GRE',
+                        "Ju Jitsu Association of Thailand": 'THA',
+                        "FÉDÉRATION ROYALE MAROCAINE DE JU-JITSU ": 'MAR'
                         }
 
 
@@ -279,8 +287,10 @@ def get_athletes_cat(eventid, cat_id, user, password):
             # for an unclear reason teams to no have a country code...
             # convert club name to country using dict...
             df_out['country_code'] = df_out['club_name'].replace(CLUBNAME_COUNTRY_MAP)
-            df_out['name'].replace(",", "/", regex=True, inplace=True)
-            df_out['name'] = df_out['name'].str.rstrip()
+            df_out['name'] = df_out['name'].str.split('(').str[1]
+            df_out['name'] = df_out['name'].str.split(')').str[0]
+            df_out['name'].replace(",", " ", regex=True, inplace=True)
+            df_out['name'].replace("_", " ", regex=False, inplace=True)
             df_ath = df_out[['name', 'country_code']]
             df_ath['cat_id'] = cat_id
             df_ath['cat_name'] = df_ath['cat_id'].replace(key_map)
@@ -361,6 +371,7 @@ def get_ranking(rank_cat_id, max_rank_pos, user, password):
         df_out['name'] = df_out['name'].str.split('(').str[0]
         df_out['name'] = df_out['name'].str.rstrip()
         df_rank = df_out[['name', 'countrycode', 'rank', 'cat_id', 'totalpoints', 'cat_title']]
+        df_rank = df_rank.rename(columns={"countrycode": 'country_code'})
         # rename rank to ranking since df.rank is a function name
         df_rank['ranking'] = df_rank['rank'].astype(int)
         df_rank = df_rank[df_rank['ranking'] < int(max_rank_pos)]
@@ -403,12 +414,12 @@ def draw_as_table(df_in):
     row_odd_color = 'white'
 
     fig_out = go.Figure(data=[go.Table(
-                        columnwidth=[15, 50, 24, 25, 25],
-                        header=dict(values=["Position", "Name", "Country", "Ranking Postion", "Ranking Points"],
+                        columnwidth=[15, 40, 20, 25, 25, 20],
+                        header=dict(values=["Position", "Name", "Country", "Ranking Position", "Ranking Points", "Similarity"],
                                     fill_color=header_color,
                                     font=dict(family="Arial", color='white', size=12),
                                     align='left'),
-                        cells=dict(values=[df_in.position, df_in.name, df_in.country_code, df_in.ranking, df_in.totalpoints],
+                        cells=dict(values=[df_in.position, df_in.name, df_in.country_code, df_in.ranking, df_in.totalpoints, df_in.similarity],
                                    line_color='darkslategray',
                                    # 2-D list of colors for alternating rows
                                    fill_color=[[row_odd_color, row_even_color]*2],
@@ -479,36 +490,44 @@ with st.spinner('Read in data'):
     df_athletes['rank_id'] = df_athletes['cat_id'].replace(catID_to_rankID)
     df_athletes = df_athletes.astype(str)
 
-    for j, key in enumerate(dict_ranking_ids):
-        # FIXME only read in rankings associated to the df_athletes
+    # only read in rankings associated to the df_athletes
+    cat_list = df_athletes['rank_id'].unique()
+
+    for j, key in enumerate(cat_list):
         ranking_cat = get_ranking(str(key),
                                   MAX_RANK,
                                   st.secrets['user'],
                                   st.secrets['password'])
         list_df_ranking.append(ranking_cat)
-        my_bar.progress(0.5+((j+1)/len(dict_ranking_ids))/2)
+        my_bar.progress(0.5+((j+1)/len(cat_list))/2)
     df_ranking = pd.concat(list_df_ranking)
     df_ranking['rank_id'] = df_ranking['cat_id']
 
 
-# duo cat have no matching on name...need to fix this
-# st.write(df_ranking[df_ranking['cat_title'].str.contains("DUO")])
-# st.write(df_athletes[df_athletes['cat_name'].str.contains("Duo")])
-
 vectorizer = TfidfVectorizer(min_df=1, analyzer=ngrams)
 
-# get all the categories that are registered
-cat_list = df_athletes['rank_id'].unique()
+with st.expander('Details on name matching', expanded=False):
+    st.write('Similar names were matched to avoid missing mapping. This is based on:')
+    st.write('https://towardsdatascience.com/surprisingly-effective-way-to-name-matching-in-python-1a67328e670e')
 
+# create dummy column for similarity score
+df_ranking['similarity'] = df_ranking['name']
+df_ranking['original_name'] = ''
 
 # loop over all ranks to match
 for cat in cat_list:
     # get the names of from leading dataframe (athletes) and ranking frame
     names_athletes = df_athletes[df_athletes['rank_id'] == cat]['name']
     names_ranking = df_ranking[df_ranking['rank_id'] == cat]['name']
+
     # skip category if empty
     if len(names_athletes) < 1:
+        df_ranking.loc[
+            df_ranking['rank_id'] == cat,
+            'similarity'
+        ] = None
         continue
+
     # combine the two lists of names into one list
     all_names = pd.concat([names_athletes, names_ranking]).values
     # perform matching over combined name list
@@ -519,13 +538,23 @@ for cat in cat_list:
         matrix = awesome_cossim_top(matrix, matrix.transpose(), 4, .4)
     # create a dataframe with the matches
     df_matches = get_matches_df(matrix, all_names)
+
+    # Duo names have much lower similarity
+    name_cat = df_athletes[df_athletes['rank_id'] == cat]['cat_name'].astype(str)[0]
+
+    if "Duo" in name_cat:
+        min_value = 0.4
+    else:
+        min_value = 0.55
+
     # remove self-mapping of names (exact matches)
     df_matches = df_matches[
         (df_matches["similarity"] < .99999999) & (
-            df_matches["similarity"] > .4)
+            df_matches["similarity"] > min_value)
     ]
     # create mapping dictionary for names
     dict_map = dict(zip(df_matches.left_side, df_matches.right_side))
+
     # if approximate matches are found, replace the names
     if len(dict_map) > 0:
         # drop all keys in the mapping dict that do not have a value
@@ -538,84 +567,50 @@ for cat in cat_list:
                 df_athletes['rank_id'] == cat
             ]['name'].values
         }
-
+        similarity_dict = {
+            key: df_matches[
+                df_matches["right_side"] == key
+            ]['similarity'].values[0] for key, value in slim_dict.items()
+        }
         # replace names in the ranking data
         df_ranking.loc[
             df_ranking['rank_id'] == cat,
+            'similarity'
+        ] = df_ranking[df_ranking['rank_id'] == cat]['similarity'].apply(lambda x:  similarity_dict.get(x))
+        df_ranking.loc[
+            df_ranking['rank_id'] == cat,
+            'original_name'
+        ] = df_ranking[df_ranking['rank_id'] == cat]['name'].apply(lambda x:  x if slim_dict.get(x) else None)
+        df_ranking.loc[
+            df_ranking['rank_id'] == cat,
             'name'
-        ] = df_ranking[df_ranking['rank_id']==cat]['name'].replace(slim_dict)
+        ] = df_ranking[df_ranking['rank_id'] == cat]['name'].replace(slim_dict)
+    else:
+        df_ranking.loc[
+            df_ranking['rank_id'] == cat,
+            'similarity'
+        ] = None
 
-df_all = pd.merge(df_athletes, df_ranking, on=['rank_id', 'name'])
-#df_all = pd.merge(df_athletes, df_ranking, on=['rank_id', 'name'], how='outer')
-
-#df_all = pd.concat([df_athletes, df_ranking], on=['rank_id'])
-st.write(df_all)
-import pdb; pdb.set_trace()
-# loop over all categories
-#vectorizer = TfidfVectorizer(min_df=1, analyzer=ngrams)
-
-
-# with st.expander('Details on name matching', expanded=False):
-#     st.write('Similar names were matched to avoid double counting. This is based on:')
-#     st.write('https://towardsdatascience.com/surprisingly-effective-way-to-name-matching-in-python-1a67328e670e')
-#     similarity = st.number_input('similarity', min_value=0.4,
-#                                  max_value=0.9, value=0.6,
-#                                  help="small number means more matches, high number only exact matches"
-#                                  )
-
-# # create empty temporary list for events to fix names
-# list_df_new = []
-
-# for i, val in enumerate(cat_list):
-#     df_new = df_all[df_all['cat_name'].str.contains(str(val))]
-
-#     # re-index the names column to continuous index starting at
-#     names_types = pd.Series(df_new['name'].values)
-
-#     if len(names_types) > 1:
-#         tf_idf_matrix = vectorizer.fit_transform(names_types)
-#         if len(names_types) > 4:
-#             matches = awesome_cossim_top(tf_idf_matrix,
-#                                          tf_idf_matrix.transpose(),
-#                                          10, 0.4)
-#         else:
-#             matches = awesome_cossim_top(tf_idf_matrix,
-#                                          tf_idf_matrix.transpose(),
-#                                          4, 0.4)
-#         # store the  matches into new dataframe called matched_df
-#         matches_df = get_matches_df(matches, names_types, top=200)
-#         # For removing all exact matches
-#         matches_df = matches_df[matches_df['similarity'] < 0.99999]
-#         # create a mapping between names in form of a dict
-#         matches_df = matches_df[matches_df['similarity'] > similarity]
-#         dict_map = dict(zip(matches_df.left_side, matches_df.right_side))
-#         df_new.loc[:, 'name'] = df_new['name'].replace(dict_map)
-
-#         list_df_new.append(df_new)
-#         if len(dict_map) > 0:
-#             print('fixing ' + str(len(dict_map)) + ' issues with names')
-
-# # overwrite existing df_ini with events with name issues fixed
-# df_ini = pd.concat(list_df_new)
-
-
-
-
-
-
+df_ranking['similarity'] = df_ranking['similarity'].astype(float).fillna(1)
+df_all = pd.merge(df_athletes, df_ranking, on=['rank_id', 'name', 'country_code'])
 # new pdf in landscape
+
 pdf = PDF('L', tourname)
 
-for k in cat_list:
+
+cat_list_str = df_athletes['cat_name'].unique()
+
+for k in cat_list_str:
     pdf.add_page()
     pdf.alias_nb_pages()
     pdf.set_font("Arial", size=20)
     pdf.cell(200, 20, txt="Seeding for Category " + k, ln=1, align='C')
 
-    names_seeding = df_all[['name', 'country_code', 'ranking', 'totalpoints']][(df_all['cat_name'] == str(k))]
+    names_seeding = df_all[['name', 'country_code', 'ranking', 'totalpoints', 'similarity', 'original_name']][(df_all['cat_name'] == str(k))]
+    names_seeding['position'] = list(range(1, len(names_seeding.index)+1))
+    names_seeding["similarity"] = names_seeding["similarity"].astype(float).round(2)
     names_seeding['ranking'] = names_seeding['ranking'].astype(int)
     names_seeding = names_seeding.sort_values(by=['ranking'], ascending=True)
-    names_seeding['position'] = list(range(1, len(names_seeding.index)+1))
 
     # remove more than 4 seeded people
     names_seeding = names_seeding[names_seeding['position'] < 5]
@@ -624,6 +619,10 @@ for k in cat_list:
     st.header(k)
     if len(names_seeding) > 0:
         st.write(names_seeding)
+
+        if not names_seeding[names_seeding["similarity"].astype(float) < 1.0].empty:
+            st.warning('There are non exact matches, check names and original_name', icon="⚠️")
+            pdf.cell(200, 20, txt='!!! There are non exact matches, check names in event and ranking', ln=1, align='C')
         fig = draw_as_table(names_seeding)
         PNG_NAME = str(k) + ".png"
         fig.write_image(PNG_NAME)
