@@ -607,7 +607,6 @@ for k in cat_list_str:
     pdf.cell(200, 20, txt="Seeding for Category " + k, ln=1, align='C')
 
     names_seeding = df_all[['name', 'country_code', 'ranking', 'totalpoints', 'similarity', 'original_name']][(df_all['cat_name'] == str(k))]
-    names_seeding["similarity"] = names_seeding["similarity"].astype(float).round(2)
     names_seeding['ranking'] = names_seeding['ranking'].astype(int)
     names_seeding = names_seeding.sort_values(by=['ranking'], ascending=True)
     names_seeding['position'] = list(range(1, len(names_seeding.index)+1))
@@ -627,7 +626,9 @@ for k in cat_list_str:
             st.write(names_seeding[['name', 'country_code', 'ranking', 'totalpoints']])
         else:
             st.warning('There are non exact matches, check names and original_name', icon="⚠️")
-            st.write(names_seeding)
+            names_seeding["similarity"] = names_seeding["similarity"].astype(float).round(2)
+            st.dataframe(names_seeding.style.highlight_between(subset=['similarity'], left=0.1, right=0.99, color="#F31C2B"))
+            names_seeding = names_seeding.astype(str)
             pdf.cell(200, 20, txt='!!! There are non exact matches, check names in event and ranking', ln=1, align='C')
         fig = draw_as_table(names_seeding)
         PNG_NAME = str(k) + ".png"
