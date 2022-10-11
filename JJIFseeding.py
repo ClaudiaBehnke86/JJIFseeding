@@ -61,7 +61,7 @@ class PDF(FPDF):
 def read_in_cat_rankid():
     ''' Read in file
      - HELPER FUNCTION
-     Reads in a csv  and convert catergory ids to catergoy names
+     Reads in a csv  and convert category ids to category names
 
     '''
     inp_file = pd.read_csv("catID_rankID.csv", sep=';')
@@ -164,6 +164,27 @@ CLUBNAME_COUNTRY_MAP = {"Belgian Ju-Jitsu Federation": 'BEL',
                         "Ju Jitsu Association of Thailand": 'THA',
                         "FÉDÉRATION ROYALE MAROCAINE DE JU-JITSU ": 'MAR'
                         }
+
+
+def conv_to_type(df_in, type_name, type_list):
+    '''
+    checks strings in data frames and
+    replaces them with types based on the _INP lists (see line 28 - 49)
+
+    Parameters
+    ----------
+    df_in
+        data frame to check [str]
+    type_name
+        the name of the _INP list to check [str]
+    type_list
+        of the _INP list to check [list]
+    '''
+    for inp_str in type_list:
+        df_in[type_name].where(~(df_in[type_name].str.contains(inp_str)),
+                               other=inp_str, inplace=True)
+
+    return df_in[type_name]
 
 
 def ngrams(string, n_gr=3):
@@ -327,7 +348,7 @@ def get_event_name(eventid, user, password):
 
 def get_ranking_cat(user, password):
     """
-    ranking has differnet category ids...
+    ranking has different category ids...
     so get a dict with them
     """
 
@@ -447,15 +468,15 @@ def draw_as_table(df_in):
 
 
 # main program starts here
-sd_key = st.number_input("Enter the Sportdata event number",
+st.sidebar.image("https://i0.wp.com/jjeu.eu/wp-content/uploads/2018/08/jjif-logo-170.png?fit=222%2C160&ssl=1",
+                 use_column_width='always')
+
+sd_key = st.sidebar.number_input("Enter the Sportdata event number",
                          help='the number behind vernr= in the URL', value=325)
 
 tourname = get_event_name(str(sd_key), st.secrets['user'], st.secrets['password'])
 
 st.title('Seeding for ' + tourname)
-
-st.sidebar.image("https://i0.wp.com/jjeu.eu/wp-content/uploads/2018/08/jjif-logo-170.png?fit=222%2C160&ssl=1",
-                 use_column_width='always')
 
 mode = st.sidebar.selectbox('Select mode', ['Top10', 'Top20'])
 
@@ -463,6 +484,13 @@ if mode == 'Top10':
     MAX_RANK = 10
 else:
     MAX_RANK = 20
+
+# preselected age_divisions
+AGE_SEL = ["U16", "U18", "U21", "Adults"]
+
+age_select = st.sidebar.multiselect('Select the age divisions for seeding',
+                                    AGE_SEL,
+                                    ["U21", "Adults"])
 
 # ID_TO_NAME = read_in_catkey()
 catID_to_rankID = read_in_cat_rankid()
@@ -489,6 +517,13 @@ with st.spinner('Read in data'):
     df_athletes['cat_id'] = df_athletes['cat_id'].astype(int)
     df_athletes['rank_id'] = df_athletes['cat_id'].replace(catID_to_rankID)
     df_athletes = df_athletes.astype(str)
+
+    # select the age divisions you want to seed
+    df_athletes['age_division'] = df_athletes['cat_name']
+    df_athletes['age_division'] = conv_to_type(df_athletes, 'age_division', AGE_SEL)
+
+    # remove what is not selected
+    df_athletes = df_athletes[df_athletes['age_division'].isin(age_select)]
 
     # only read in rankings associated to the df_athletes
     cat_list = df_athletes['rank_id'].unique()
@@ -543,7 +578,7 @@ for cat in cat_list:
     name_cat = df_athletes[df_athletes['rank_id'] == cat]['cat_name'].astype(str)[0]
 
     if "Duo" in name_cat:
-        min_value = 0.4
+        min_value = 0.35
     else:
         min_value = 0.55
 
