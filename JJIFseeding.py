@@ -454,7 +454,7 @@ def draw_as_table(df_in):
     fig_out.update_layout(
         autosize=False,
         width=750,
-        height=(numb_row+1) * 30,
+        height=(numb_row+1) * 35,
         margin=dict(
             l=20,
             r=50,
