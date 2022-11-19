@@ -7,3 +7,5 @@ matplotlib
 fpdf2
 sklearn
 sparse_dot_topn
+sklearn
+scikit-learn
