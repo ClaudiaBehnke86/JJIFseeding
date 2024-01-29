@@ -161,7 +161,16 @@ CLUBNAME_COUNTRY_MAP = {"Belgian Ju-Jitsu Federation": 'BEL',
                         "Ju-Jitsu Federation of Slovenia": 'SLO',
                         "Hellenic Ju-Jitsu Federation": 'GRE',
                         "Ju Jitsu Association of Thailand": 'THA',
-                        "FÉDÉRATION ROYALE MAROCAINE DE JU-JITSU ": 'MAR'
+                        "FÉDÉRATION ROYALE MAROCAINE DE JU-JITSU ": 'MAR',
+                        "Ju-Jitsu Federation of Montenegro": 'MNE',
+                        "Swiss Judo & Ju-Jitsu Federation": 'SUI',
+                        "Kazakhstan Jiu Jitsu Association": 'KAZ',
+                        "Mongolian Jiu-Jitsu Association": 'MGL',
+                        "Algerian Federation of Ju Jitsu": 'ALG',
+                        "Federacion Colombiana de Jiu-Jitsu": 'COL',
+                        "Federaciòn Costarricense de Jiu Jitsu": 'CRC',
+                        "Federaciòn Uruguaya de Jiu Jitsu": 'URU',
+                        "Asociatiòn Argentina de Jiu Jitsu": 'ARG',
                         }
 
 
@@ -314,7 +323,7 @@ def get_athletes_cat(eventid, cat_id, user, password):
             df_out['name'] = df_out['name'].str.split('(').str[1]
             df_out['name'] = df_out['name'].str.split(')').str[0]
             df_out['name'].replace(",", " ", regex=True, inplace=True)
-            df_out['name'].replace("_", " ", regex=False, inplace=True)
+            df_out['name'].replace("_", " ", regex=True, inplace=True)
             df_ath = df_out[['name', 'country_code']]
             df_ath['cat_id'] = cat_id
             df_ath['cat_name'] = df_ath['cat_id'].replace(key_map)
@@ -558,7 +567,6 @@ with st.spinner('Read in data'):
             my_bar.progress(0.5+((j+1)/len(cat_list))/2)
         df_ranking = pd.concat(list_df_ranking)
         df_ranking['rank_id'] = df_ranking['cat_id']
-
 
         vectorizer = TfidfVectorizer(min_df=1, analyzer=ngrams)
 
