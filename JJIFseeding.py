@@ -268,7 +268,7 @@ def get_matches_df(sparse_matrix, name_vector, top=100):
                          'similarity': similarity_in})
 
 
-@st.cache
+@st.cache_data
 def get_athletes_cat(eventid, cat_id, user, password):
     """
     get the athletes form sportdata per category & export to a nice data frame
@@ -368,7 +368,7 @@ def get_ranking_cat(user, password):
     return dict_ranking
 
 
-@st.cache
+@st.cache_data
 def get_ranking(rank_cat_id, max_rank_pos, user, password):
     """
     get the athletes form sportdata per category & export to a nice data frame
@@ -482,7 +482,7 @@ response = requests.get(uri_upc, auth=HTTPBasicAuth(st.secrets['user'], st.secre
 d_upc = response.json()
 df_upc = json_normalize(d_upc)
 
-offmail = ["sportdata@jjif.org", "rick.frowyn@jjeu.eu", "office@jjau.org", "mail@jjif.org", "jjif@sportdata.org"]
+offmail = ["sportdata@jjif.org", "rick.frowyn@jjeu.eu", "office@jjau.org", "mail@jjif.org", "jjif@sportdata.org", "fjjitalia@gmail.com"]
 evts = df_upc['name'][df_upc['contactemail'].isin(offmail)].tolist()
 evts.append('Other')
 option = st.sidebar.selectbox("Choose your event", evts,
