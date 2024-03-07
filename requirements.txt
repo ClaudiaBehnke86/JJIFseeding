@@ -5,5 +5,5 @@ streamlit
 kaleido
 matplotlib
 fpdf2
-sparse_dot_topn
+sparse_dot_topn==0.3.6
 scikit-learn

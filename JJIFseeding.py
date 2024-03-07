@@ -141,8 +141,8 @@ key_map = {
     "1485": "Adults Jiu-Jitsu Women -70 kg",
     "1486": "Adults Jiu-Jitsu Women +70 kg",
     "1494": "Adults Show Men",
-    "1495": "Adults Show Mixed",
-    "1493": "Adults Show Women"
+    "1495": "Adults Show Women",
+    "1493": "Adults Show Mixed"
     }
 
 
@@ -371,6 +371,7 @@ def get_ranking_cat(user, password):
     d_in = response.json()
     df_rankcats = json_normalize(d_in)
     df_rankcats = df_rankcats.drop(['cat_sex', 'cat_isteam'], axis=1)
+    st.write(df_rankcats)
     df_rankcats = df_rankcats.set_index('cat_id')
     my_series = df_rankcats['cat_title'].squeeze()
     dict_ranking = my_series.to_dict()
@@ -580,6 +581,7 @@ with st.spinner('Read in data'):
 
         # loop over all ranks to match
         for cat in cat_list:
+
             # get the names of from leading dataframe (athletes) and ranking frame
             names_athletes = df_athletes[df_athletes['rank_id'] == cat]['name']
             names_ranking = df_ranking[df_ranking['rank_id'] == cat]['name']
@@ -661,7 +663,6 @@ with st.spinner('Read in data'):
 
         pdf = PDF('L', tourname)
 
-
         cat_list_str = df_athletes['cat_name'].unique()
 
         for k in cat_list_str:
@@ -670,39 +671,42 @@ with st.spinner('Read in data'):
             pdf.set_font("Arial", size=20)
             pdf.cell(200, 20, txt="Seeding for Category " + k, ln=1, align='C')
 
-            names_seeding = df_all[['name', 'country_code', 'ranking', 'totalpoints', 'similarity', 'original_name']][(df_all['cat_name'] == str(k))]
-            names_seeding['ranking'] = names_seeding['ranking'].astype(int)
-            names_seeding = names_seeding.sort_values(by=['ranking'], ascending=True)
-            names_seeding['position'] = list(range(1, len(names_seeding.index)+1))
-
-            # move positions to first column
-            cols = names_seeding.columns.tolist()
-            cols = cols[-1:] + cols[:-1]
-            names_seeding = names_seeding[cols]
-
-            # remove more than 4 seeded people
-            names_seeding = names_seeding[names_seeding['position'] < 5]
-            names_seeding = names_seeding.astype(str)
-
             st.header(k)
-            if len(names_seeding) > 0:
-                if names_seeding[names_seeding["similarity"].astype(float) < 1.0].empty:
-                    st.write(names_seeding[['name', 'country_code', 'ranking', 'totalpoints']])
-                else:
-                    st.warning('There are non exact matches, check names and original_name', icon="⚠️")
-                    names_seeding["similarity"] = names_seeding["similarity"].astype(float).round(2)
-                    st.dataframe(names_seeding.style.highlight_between(subset=['similarity'], left=0.1, right=0.99, color="#F31C2B"))
-                    names_seeding = names_seeding.astype(str)
-                    pdf.cell(200, 20, txt='!!! There are non exact matches, check names in event and ranking', ln=1, align='C')
-                fig = draw_as_table(names_seeding)
-                PNG_NAME = str(k) + ".png"
-                fig.write_image(PNG_NAME)
-                pdf.image(PNG_NAME)
-                os.remove(PNG_NAME)
+            if len(df_all[(df_all['cat_name'] == str(k))]) <= 0:
+                st.write("Category is empty")
             else:
-                st.write("No one in Seeding")
-                pdf.set_font("Arial", size=15)
-                pdf.cell(200, 20, txt="No one in Seeding", ln=1, align='L')
+                names_seeding = df_all[['name', 'country_code', 'ranking', 'totalpoints', 'similarity', 'original_name']][(df_all['cat_name'] == str(k))]
+                names_seeding['ranking'] = names_seeding['ranking'].astype(int)
+                names_seeding = names_seeding.sort_values(by=['ranking'], ascending=True)
+                names_seeding['position'] = list(range(1, len(names_seeding.index)+1))
+
+                # move positions to first column
+                cols = names_seeding.columns.tolist()
+                cols = cols[-1:] + cols[:-1]
+                names_seeding = names_seeding[cols]
+
+                # remove more than 4 seeded people
+                names_seeding = names_seeding[names_seeding['position'] < 5]
+                names_seeding = names_seeding.astype(str)
+
+                if len(names_seeding) > 0:
+                    if names_seeding[names_seeding["similarity"].astype(float) < 1.0].empty:
+                        st.write(names_seeding[['name', 'country_code', 'ranking', 'totalpoints']])
+                    else:
+                        st.warning('There are non exact matches, check names and original_name', icon="⚠️")
+                        names_seeding["similarity"] = names_seeding["similarity"].astype(float).round(2)
+                        st.dataframe(names_seeding.style.highlight_between(subset=['similarity'], left=0.1, right=0.99, color="#F31C2B"))
+                        names_seeding = names_seeding.astype(str)
+                        pdf.cell(200, 20, txt='!!! There are non exact matches, check names in event and ranking', ln=1, align='C')
+                    fig = draw_as_table(names_seeding)
+                    PNG_NAME = str(k) + ".png"
+                    fig.write_image(PNG_NAME)
+                    pdf.image(PNG_NAME)
+                    os.remove(PNG_NAME)
+                else:
+                    st.write("No one in Seeding")
+                    pdf.set_font("Arial", size=15)
+                    pdf.cell(200, 20, txt="No one in Seeding", ln=1, align='L')
 
         pdf.output("dummy2.pdf")
         with open("dummy2.pdf", "rb") as pdf_file:
