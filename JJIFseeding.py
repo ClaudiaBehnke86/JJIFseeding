@@ -371,7 +371,6 @@ def get_ranking_cat(user, password):
     d_in = response.json()
     df_rankcats = json_normalize(d_in)
     df_rankcats = df_rankcats.drop(['cat_sex', 'cat_isteam'], axis=1)
-    st.write(df_rankcats)
     df_rankcats = df_rankcats.set_index('cat_id')
     my_series = df_rankcats['cat_title'].squeeze()
     dict_ranking = my_series.to_dict()
@@ -579,10 +578,14 @@ with st.spinner('Read in data'):
         df_ranking['similarity'] = df_ranking['name']
         df_ranking['original_name'] = ''
 
+        df_athletes['name'] = df_athletes['name'].str.upper()
+        df_ranking['name'] = df_ranking['name'].str.upper()
+
         # loop over all ranks to match
         for cat in cat_list:
 
             # get the names of from leading dataframe (athletes) and ranking frame
+
             names_athletes = df_athletes[df_athletes['rank_id'] == cat]['name']
             names_ranking = df_ranking[df_ranking['rank_id'] == cat]['name']
 
