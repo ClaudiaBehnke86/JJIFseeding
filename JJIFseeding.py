@@ -112,6 +112,7 @@ key_map = {
     "1491": "Adults Duo Men",
     "1492": "Adults Duo Mixed",
     "1490": "Adults Duo Women",
+    "21351": "Adults Duo Open",
     "1444": "Adults Fighting Men -56 kg",
     "1451": "Adults Fighting Men -62 kg",
     "1446": "Adults Fighting Men -69 kg",
@@ -142,7 +143,8 @@ key_map = {
     "1486": "Adults Jiu-Jitsu Women +70 kg",
     "1494": "Adults Show Men",
     "1495": "Adults Show Women",
-    "1493": "Adults Show Mixed"
+    "1493": "Adults Show Mixed",
+    "21185": "Adults Show Open"
     }
 
 
@@ -507,7 +509,7 @@ tourname = get_event_name(str(sd_key), st.secrets['user'], st.secrets['password'
 
 st.title('Seeding for ' + tourname)
 
-mode = st.sidebar.selectbox('Select mode', ['Top10', 'Top20'])
+mode = st.sidebar.selectbox('Select mode', ['Top20', 'Top10'])
 
 if mode == 'Top10':
     MAX_RANK = 10
@@ -675,8 +677,11 @@ with st.spinner('Read in data'):
             pdf.cell(200, 20, txt="Seeding for Category " + k, ln=1, align='C')
 
             st.header(k)
-            if len(df_all[(df_all['cat_name'] == str(k))]) <= 0:
-                st.write("Category is empty")
+
+            if(len(df_athletes[df_athletes['cat_name'] == str(k)])<= 1):
+                st.info("Less than two athletes in category", icon="🚨")
+            elif len(df_all[(df_all['cat_name'] == str(k))]) <= 0:
+                st.success("No one is in seeding", icon="ℹ️")
             else:
                 names_seeding = df_all[['name', 'country_code', 'ranking', 'totalpoints', 'similarity', 'original_name']][(df_all['cat_name'] == str(k))]
                 names_seeding['ranking'] = names_seeding['ranking'].astype(int)
