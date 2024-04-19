@@ -599,21 +599,26 @@ with st.spinner('Read in data'):
                 ] = None
                 continue
 
+
             # combine the two lists of names into one list
             all_names = pd.concat([names_athletes, names_ranking]).values
             # perform matching over combined name list
+
+
             matrix = vectorizer.fit_transform(all_names)
             if len(all_names) > 4:
-                matrix = awesome_cossim_top(matrix, matrix.transpose(), 10, .4)
+                matrix = awesome_cossim_top(matrix, matrix.transpose(), 9, .3)
             else:
                 matrix = awesome_cossim_top(matrix, matrix.transpose(), 4, .4)
             # create a dataframe with the matches
             df_matches = get_matches_df(matrix, all_names)
 
-            # Duo names have much lower similarity
             name_cat = df_athletes[df_athletes['rank_id'] == cat]['cat_name'].astype(str)[0]
 
+            # Duo names have much lower similarity
             if "Duo" in name_cat:
+                min_value = 0.35
+            elif "Show" in name_cat:
                 min_value = 0.35
             else:
                 min_value = 0.55
@@ -704,8 +709,14 @@ with st.spinner('Read in data'):
                         st.warning('There are non exact matches, check names and original_name', icon="⚠️")
                         names_seeding["similarity"] = names_seeding["similarity"].astype(float).round(2)
                         st.dataframe(names_seeding.style.highlight_between(subset=['similarity'], left=0.1, right=0.99, color="#F31C2B"))
+
                         names_seeding = names_seeding.astype(str)
                         pdf.cell(200, 20, txt='!!! There are non exact matches, check names in event and ranking', ln=1, align='C')
+
+                    if len(names_seeding['totalpoints'].unique())<len(names_seeding['totalpoints']):
+                        st.error('Athletes have the same number of points, please make a pre-draw', icon="🚨")
+                        pdf.cell(200, 20, txt='!!! Athletes have the same number of points, please make a pre-draw', ln=1, align='C')
+
                     fig = draw_as_table(names_seeding)
                     PNG_NAME = str(k) + ".png"
                     fig.write_image(PNG_NAME)
