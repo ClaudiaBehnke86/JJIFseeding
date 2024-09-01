@@ -2,6 +2,12 @@
 
 Reads in the registrations and makes a seeding based on the ranking list
 
+Names are mapped using:
+https://towardsdatascience.com/surprisingly-effective-way-to-name-matching-in-python-1a67328e670e
+force A and B as a CSR matrix.
+With sportse_dot_topn updated https://github.com/ing-bank/sparse_dot_topn/tree/master
+
+
 '''
 import numpy as np
 from datetime import datetime
@@ -20,8 +26,7 @@ pd.options.mode.chained_assignment = None  # default='warn'
 
 # for the name matching
 from sklearn.feature_extraction.text import TfidfVectorizer
-from scipy.sparse import csr_matrix
-import sparse_dot_topn.sparse_dot_topn as ct  # Leading Juice for us
+from sparse_dot_topn import sp_matmul_topn
 
 class PDF(FPDF):
     '''
@@ -71,81 +76,21 @@ def read_in_cat_rankid():
     return rank_cat_id_out
 
 
+def read_in_catkey():
+    ''' Read in file
+     - HELPER FUNCTION
+     Reads in a csv  and convert category ids to category names
+
+    '''
+    inp_file = pd.read_csv('https://raw.githubusercontent.com/ClaudiaBehnke86/JJIFsupportFiles/main/catID_name.csv', sep=';')
+    key_map_inp = inp_file[
+        ['cat_id', 'name']
+    ].set_index('cat_id').to_dict()['name']
+
+    return key_map_inp
+
 # uri of sportdataAPI
 BASEURI = "https://www.sportdata.org/ju-jitsu/rest/"
-
-key_map = {
-    "1466": "U21 Jiu-Jitsu Women -45 kg",
-    "1467": "U21 Jiu-Jitsu Women -48 kg",
-    "1468": "U21 Jiu-Jitsu Women -52 kg",
-    "1469": "U21 Jiu-Jitsu Women -57 kg",
-    "1470": "U21 Jiu-Jitsu Women -63 kg",
-    "1471": "U21 Jiu-Jitsu Women -70 kg",
-    "1472": "U21 Jiu-Jitsu Women +70 kg",
-    "1459": "U21 Jiu-Jitsu Men -56 kg",
-    "1460": "U21 Jiu-Jitsu Men -62 kg",
-    "1461": "U21 Jiu-Jitsu Men -69 kg",
-    "1462": "U21 Jiu-Jitsu Men -77 kg",
-    "1463": "U21 Jiu-Jitsu Men -85 kg",
-    "1464": "U21 Jiu-Jitsu Men -94 kg",
-    "1465": "U21 Jiu-Jitsu Men +94 kg",
-    "1488": "U21 Duo Men",
-    "1487": "U21 Duo Mixed",
-    "1489": "U21 Duo Women",
-    "1436": "U21 Fighting Women -45 kg",
-    "1437": "U21 Fighting Women -48 kg",
-    "1438": "U21 Fighting Women -52 kg",
-    "1439": "U21 Fighting Women -57 kg",
-    "1441": "U21 Fighting Women -63 kg",
-    "1442": "U21 Fighting Women -70 kg",
-    "1443": "U21 Fighting Women +70 kg",
-    "1429": "U21 Fighting Men -56 kg",
-    "1430": "U21 Fighting Men -62 kg",
-    "1431": "U21 Fighting Men -69 kg",
-    "1432": "U21 Fighting Men -77 kg",
-    "1433": "U21 Fighting Men -85 kg",
-    "1434": "U21 Fighting Men -94 kg",
-    "1435": "U21 Fighting Men +94 kg",
-    "1497": "U21 Show Men",
-    "1498": "U21 Show Mixed",
-    "1496": "U21 Show Women",
-    "1491": "Adults Duo Men",
-    "1492": "Adults Duo Mixed",
-    "1490": "Adults Duo Women",
-    "21351": "Adults Duo Open",
-    "1444": "Adults Fighting Men -56 kg",
-    "1451": "Adults Fighting Men -62 kg",
-    "1446": "Adults Fighting Men -69 kg",
-    "1447": "Adults Fighting Men -77 kg",
-    "1448": "Adults Fighting Men -85 kg",
-    "1449": "Adults Fighting Men -94 kg",
-    "1450": "Adults Fighting Men +94 kg",
-    "1452": "Adults Fighting Women -45 kg",
-    "1453": "Adults Fighting Women -48 kg",
-    "1454": "Adults Fighting Women -52 kg",
-    "1455": "Adults Fighting Women -57 kg",
-    "1456": "Adults Fighting Women -63 kg",
-    "1457": "Adults Fighting Women -70 kg",
-    "1458": "Adults Fighting Women +70 kg",
-    "1473": "Adults Jiu-Jitsu Men -56 kg",
-    "1474": "Adults Jiu-Jitsu Men -62 kg",
-    "1475": "Adults Jiu-Jitsu Men -69 kg",
-    "1476": "Adults Jiu-Jitsu Men -77 kg",
-    "1477": "Adults Jiu-Jitsu Men -85 kg",
-    "1478": "Adults Jiu-Jitsu Men -94 kg",
-    "1479": "Adults Jiu-Jitsu Men +94 kg",
-    "1480": "Adults Jiu-Jitsu Women -45 kg",
-    "1481": "Adults Jiu-Jitsu Women -48 kg",
-    "1482": "Adults Jiu-Jitsu Women -52 kg",
-    "1483": "Adults Jiu-Jitsu Women -57 kg",
-    "1484": "Adults Jiu-Jitsu Women -63 kg",
-    "1485": "Adults Jiu-Jitsu Women -70 kg",
-    "1486": "Adults Jiu-Jitsu Women +70 kg",
-    "1494": "Adults Show Men",
-    "1495": "Adults Show Women",
-    "1493": "Adults Show Mixed",
-    "21185": "Adults Show Open"
-    }
 
 
 # since teams categories have no country I use this quick and dirty workaround
@@ -216,38 +161,6 @@ def ngrams(string, n_gr=3):
     return [''.join(ngram_in) for ngram_in in ngrams_in]
 
 
-def awesome_cossim_top(A, B, ntop, lower_bound=0):
-    '''
-    Function from name comparison
-    'https://towardsdatascience.com/surprisingly-effective-way-to-name-matching-in-python-1a67328e670e'
-
-    force A and B as a CSR matrix.
-    If they have already been CSR, there is no overhead'''
-    A = A.tocsr()
-    B = B.tocsr()
-    M, _ = A.shape
-    _, N = B.shape
-
-    idx_dtype = np.int32
-
-    nnz_max = M*ntop
-
-    indptr = np.zeros(M+1, dtype=idx_dtype)
-    indices = np.zeros(nnz_max, dtype=idx_dtype)
-    data = np.zeros(nnz_max, dtype=A.dtype)
-    ct.sparse_dot_topn(
-        M, N, np.asarray(A.indptr, dtype=idx_dtype),
-        np.asarray(A.indices, dtype=idx_dtype),
-        A.data,
-        np.asarray(B.indptr, dtype=idx_dtype),
-        np.asarray(B.indices, dtype=idx_dtype),
-        B.data,
-        ntop,
-        lower_bound,
-        indptr, indices, data)
-    return csr_matrix((data, indices, indptr), shape=(M, N))
-
-
 def get_matches_df(sparse_matrix, name_vector, top=100):
     '''
     Function from name comparison
@@ -279,8 +192,89 @@ def get_matches_df(sparse_matrix, name_vector, top=100):
                          'similarity': similarity_in})
 
 
-@st.cache_data
-def get_athletes_cat(eventid, cat_id, user, password):
+def get_participants(eventid, user, password):
+    """
+    get the athletes form sportdata export to a nice data frame
+
+    Parameters
+    ----------
+    eventid
+        sportdata event_id (from database) [int]
+
+     user
+        api user name
+    password
+        api user password
+    """
+
+    # URI of the rest API
+    uri = str(BASEURI)+'event/members/'+str(eventid)+'/'
+
+    response = requests.get(uri, auth=HTTPBasicAuth(user, password), timeout=5)
+    d_in = response.json()
+
+    if len(d_in) > 0:
+        df_out = json_normalize(d_in)
+    else:
+        df_out = pd.DataFrame()
+
+    # drop rows that have no 'categories' (e.g. VIP's)
+    df_out.dropna(inplace=True, subset="categories")
+    # create a temporary column that counts how many categories an athlete has
+    # participated in
+    df_out["no_of_categories"] = df_out["categories"].apply(lambda x: len(x))
+    # duplicate each row n times based on the number (n) of categories
+    df_out = df_out.loc[df_out.index.repeat(df_out["no_of_categories"])]
+    # create a temporary integer index, this is now the only variable that
+    # differentiates the rows that were copied in the previous line
+    df_out["temp_index"] = np.arange(0, len(df_out))
+    # now groupby the unique id, make a transform and assign each row an
+    # iterator that counts the occurence of duplicate rows
+    df_out["category_counter"] = df_out.groupby(
+        "id"
+    )["temp_index"].transform(lambda x: x - x.min())
+    # now we can use this 'category' to unfold the categories dictionaries
+    # do this in a loop over the max of category_counter to ensure that
+    # only vectorized operations are used and we don't need a nested 'apply'
+    df_out["categories_unique"] = ""
+    df_out["cat_id"] = 0
+
+    # reserve an empty series that contains the categories that an
+    # athlete participates in. we create a separate series for athletes
+    # that participate only in 1 category, athletes that participate
+    # in 2 categories, etc (i_cat is the iterator for this)
+    i_cat_series = pd.Series()
+    for i_cat in range(0, df_out["category_counter"].max() + 1):
+        _temp_series = df_out[
+            df_out["category_counter"] == i_cat
+        ]["categories"].apply(lambda x: x[i_cat]["id"])
+        i_cat_series = pd.concat([i_cat_series, _temp_series])
+
+    # assign, for each athlete in the df_out dataframe, the category
+    # or categories that they have participated in
+    df_out["cat_id"] = i_cat_series.sort_index()
+
+    # fit names to right formate
+    df_out['name'] = df_out['first'] + " " + df_out['last']
+
+    # clean up unused and temporary columns
+    del df_out["categories"]
+    del df_out["categories_unique"]
+    del df_out["temp_index"]
+    del df_out["category_counter"]
+    del df_out["no_of_categories"]
+    del df_out["country_name"]
+    del df_out["flag"]
+    del df_out["club_id"]
+    del df_out["club_name"]
+    del df_out["dateofbirth"]
+    del df_out["passport_id"]
+    del df_out["type"]
+    del df_out["sex"]
+
+    return df_out
+
+def get_athletes_cat(eventid, cat_id, user, password, key_map):
     """
     get the athletes form sportdata per category & export to a nice data frame
 
@@ -378,8 +372,7 @@ def get_ranking_cat(user, password):
     dict_ranking = my_series.to_dict()
     return dict_ranking
 
-
-@st.cache_data
+#@st.cache_data
 def get_ranking(rank_cat_id, max_rank_pos, user, password):
     """
     get the athletes form sportdata per category & export to a nice data frame
@@ -489,11 +482,17 @@ st.sidebar.image("https://i0.wp.com/jjeu.eu/wp-content/uploads/2018/08/jjif-logo
 # get upcoming events
 uri_upc = "https://www.sportdata.org/ju-jitsu/rest/events/upcoming/"
 
+#read in categories
 response = requests.get(uri_upc, auth=HTTPBasicAuth(st.secrets['user'], st.secrets['password']), timeout=5)
 d_upc = response.json()
 df_upc = json_normalize(d_upc)
 
-offmail = ["sportdata@jjif.org", "rick.frowyn@jjeu.eu", "office@jjau.org", "mail@jjif.org", "jjif@sportdata.org", "fjjitalia@gmail.com"]
+# skip events which are not tournaments
+df_upc = df_upc[~df_upc['name'].str.contains("Referee")]
+df_upc = df_upc[~df_upc['name'].str.contains("Course")]
+df_upc = df_upc[~df_upc['name'].str.contains("REFEREE")]
+
+offmail = ["sportdata@jjif.org","worlds@jjif.org","pesk@adsys.gr" ,"rick.frowyn@jjeu.eu", "office@jjau.org", "mail@jjif.org", "jjif@sportdata.org", "fjjitalia@gmail.com"]
 evts = df_upc['name'][df_upc['contactemail'].isin(offmail)].tolist()
 evts.append('Other')
 option = st.sidebar.selectbox("Choose your event", evts,
@@ -517,7 +516,7 @@ else:
     MAX_RANK = 20
 
 # preselected age_divisions
-AGE_SEL = ["U16", "U18", "U21", "Adults"]
+AGE_SEL = ["U18", "U21", "Adults"]
 
 age_select = st.sidebar.multiselect('Select the age divisions for seeding',
                                     AGE_SEL,
@@ -525,6 +524,10 @@ age_select = st.sidebar.multiselect('Select the age divisions for seeding',
 
 # ID_TO_NAME = read_in_catkey()
 catID_to_rankID = read_in_cat_rankid()
+
+# maps ids to human readable names
+key_map = read_in_catkey()
+
 
 # create empty temporary list for categories to merge into team categories
 list_df_athletes = []
@@ -534,25 +537,34 @@ dict_ranking_ids = get_ranking_cat(st.secrets['user'], st.secrets['password'])
 
 my_bar = st.progress(0)
 with st.spinner('Read in data'):
-    list_df_ath = []
-    for i, key_ath in enumerate(key_map):
-        athletes_cat = get_athletes_cat(str(sd_key),
-                                        str(key_ath),
-                                        st.secrets['user'],
-                                        st.secrets['password'])
-        list_df_athletes.append(athletes_cat)
 
-        my_bar.progress(((i+1)/len(key_map))/2)
-    df_athletes = pd.concat(list_df_athletes)
+    df_athletes = get_participants(str(sd_key),
+                                   st.secrets['user'],
+                                   st.secrets['password'])
+
+    list_df_ath = []
 
     if len(df_athletes) > 0:
         df_athletes['cat_id'] = df_athletes['cat_id'].astype(int)
-        df_athletes['rank_id'] = df_athletes['cat_id'].replace(catID_to_rankID)
-        df_athletes = df_athletes.astype(str)
-
         # select the age divisions you want to seed
+        df_athletes['cat_name'] = df_athletes['cat_id'].replace(key_map)
+        with st.expander('Cat_ids without matching name', expanded=False):
+            st.write(df_athletes['cat_id'][df_athletes['cat_id'] == df_athletes['cat_name'] ].unique().tolist())
+
+        df_athletes = df_athletes[df_athletes['cat_id'] != df_athletes['cat_name'] ]
+
         df_athletes['age_division'] = df_athletes['cat_name']
         df_athletes['age_division'] = conv_to_type(df_athletes, 'age_division', AGE_SEL)
+
+
+
+        df_athletes['rank_id'] = df_athletes['cat_id'].replace(catID_to_rankID)
+        df_athletes = df_athletes.astype(str)
+        #remove categories without ranking
+        with st.expander('Categories without ranking list', expanded=False):
+            st.write(df_athletes['cat_name'][df_athletes['cat_id'] == df_athletes['rank_id'] ].unique().tolist())
+
+        df_athletes = df_athletes[df_athletes['cat_id'] != df_athletes['rank_id'] ]
 
         # remove what is not selected
         df_athletes = df_athletes[df_athletes['age_division'].isin(age_select)]
@@ -587,10 +599,10 @@ with st.spinner('Read in data'):
         for cat in cat_list:
 
             # get the names of from leading dataframe (athletes) and ranking frame
-
             names_athletes = df_athletes[df_athletes['rank_id'] == cat]['name']
             names_ranking = df_ranking[df_ranking['rank_id'] == cat]['name']
 
+\
             # skip category if empty
             if len(names_athletes) < 1:
                 df_ranking.loc[
@@ -604,16 +616,21 @@ with st.spinner('Read in data'):
             all_names = pd.concat([names_athletes, names_ranking]).values
             # perform matching over combined name list
 
-
             matrix = vectorizer.fit_transform(all_names)
             if len(all_names) > 4:
-                matrix = awesome_cossim_top(matrix, matrix.transpose(), 9, .3)
-            else:
-                matrix = awesome_cossim_top(matrix, matrix.transpose(), 4, .4)
-            # create a dataframe with the matches
-            df_matches = get_matches_df(matrix, all_names)
+                matches = sp_matmul_topn(matrix,
+                                         matrix.transpose(),
+                                         top_n=9, threshold=0.3, sort=True)
 
-            name_cat = df_athletes[df_athletes['rank_id'] == cat]['cat_name'].astype(str)[0]
+            else:
+                matches = sp_matmul_topn(matrix,
+                                         matrix.transpose(),
+                                         top_n=4, threshold=0.4, sort=True)
+
+            # create a dataframe with the matches
+            df_matches = get_matches_df(matches, all_names)
+            name_cat = df_athletes[df_athletes['rank_id'] == cat]['cat_name'].astype(str)
+
 
             # Duo names have much lower similarity
             if "Duo" in name_cat:
@@ -731,9 +748,10 @@ with st.spinner('Read in data'):
         with open("dummy2.pdf", "rb") as pdf_file:
             PDFbyte2 = pdf_file.read()
 
+        fname = tourname + ' Seeding.pdf'
         st.download_button(label="Download Seeding",
                            data=PDFbyte2,
-                           file_name='Download Seeding.pdf')
+                           file_name=(fname))
         os.remove("dummy2.pdf")
 
     else:
