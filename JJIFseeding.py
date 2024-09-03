@@ -305,9 +305,8 @@ def get_couples(eventid, user, password):
         num_par = df_out[['id', 'number_of_participants']]
 
     else:
-        print('no valid categories in event')
-        num_par = {}
-
+        df_ath_couples = pd.DataFrame()
+        return df_ath_couples
 
     duo_ids = ["1491", "1492", 21351, 1490, 1889, 1890, 1891, 1488, 1487, 1489]
     show_ids =[1494, 1493, 21185, 1495, 1892, 1893, 1894, 1497, 1498, 1496]
@@ -317,8 +316,6 @@ def get_couples(eventid, user, password):
     num_par = num_par[num_par["id"].isin(couple_ids)]
 
     list_df_couples = []
-
-
 
     for cat_id in num_par["id"].tolist():
 
