@@ -118,6 +118,7 @@ CLUBNAME_COUNTRY_MAP = {"Belgian Ju-Jitsu Federation": 'BEL',
                         "Federaciòn Costarricense de Jiu Jitsu": 'CRC',
                         "Federaciòn Uruguaya de Jiu Jitsu": 'URU',
                         "Asociatiòn Argentina de Jiu Jitsu": 'ARG',
+                        "Bulgarian Ju-Jitsu Federation": 'BUL'
                         }
 
 
@@ -213,10 +214,12 @@ def get_participants(eventid, user, password):
     response = requests.get(uri, auth=HTTPBasicAuth(user, password), timeout=5)
     d_in = response.json()
 
+    # check if df is filled
     if len(d_in) > 0:
         df_out = json_normalize(d_in)
     else:
         df_out = pd.DataFrame()
+        return df_out
 
     # drop rows that have no 'categories' (e.g. VIP's)
     df_out.dropna(inplace=True, subset="categories")
@@ -274,7 +277,7 @@ def get_participants(eventid, user, password):
 
     return df_out
 
-def get_athletes_cat(eventid, cat_id, user, password, key_map):
+def get_couples(eventid, user, password):
     """
     get the athletes form sportdata per category & export to a nice data frame
 
@@ -291,28 +294,44 @@ def get_athletes_cat(eventid, cat_id, user, password, key_map):
     """
 
     # URI of the rest API
-    uri = str(BASEURI)+'event/categories/'+str(eventid)+'/'+str(cat_id)+'/'
+    uri = str(BASEURI)+'event/categories/'+str(eventid)+'/'
 
     response = requests.get(uri, auth=HTTPBasicAuth(user, password), timeout=5)
-    d_in = response.json()
-    if len(d_in) > 0:
-        df_out = json_normalize(d_in["members"])
-    else:
-        df_out = pd.DataFrame()
+    d = response.json()
 
-    if not df_out.empty:
-        # first individual categories
-        if df_out['type'].str.contains('athlete').any():
-            #  match to name format of Duo categories
-            df_out['last'] = df_out['last'].str.rstrip()
-            df_out['first'] = df_out['first'].str.rstrip()
-            df_out['name'] = df_out['first'] + " " + df_out['last']
-            df_ath = df_out[['name', 'country_code']]
-            # add the origial category id
-            df_ath['cat_id'] = cat_id
-            df_ath['cat_name'] = df_ath['cat_id'].replace(key_map)
-            df_ath = df_ath.astype(str)
+    if 'categories' in d:
+        df_out = json_normalize(d['categories'])
+
+        num_par = df_out[['id', 'number_of_participants']]
+
+    else:
+        print('no valid categories in event')
+        num_par = {}
+
+
+    duo_ids = ["1491", "1492", 21351, 1490, 1889, 1890, 1891, 1488, 1487, 1489]
+    show_ids =[1494, 1493, 21185, 1495, 1892, 1893, 1894, 1497, 1498, 1496]
+
+    couple_ids = duo_ids + show_ids
+
+    num_par = num_par[num_par["id"].isin(couple_ids)]
+
+    list_df_couples = []
+
+
+
+    for cat_id in num_par["id"].tolist():
+
+        uri = str(BASEURI)+'event/categories/'+str(eventid)+'/'+str(cat_id)+'/'
+
+        response = requests.get(uri, auth=HTTPBasicAuth(user, password), timeout=5)
+        d_in = response.json()
+        if len(d_in) > 0:
+            df_out = json_normalize(d_in["members"])
         else:
+            df_out = pd.DataFrame()
+
+        if not df_out.empty:
             # for an unclear reason teams to no have a country code...
             # convert club name to country using dict...
             df_out['country_code'] = df_out['club_name'].replace(CLUBNAME_COUNTRY_MAP)
@@ -322,12 +341,16 @@ def get_athletes_cat(eventid, cat_id, user, password, key_map):
             df_out['name'].replace("_", " ", regex=True, inplace=True)
             df_ath = df_out[['name', 'country_code']]
             df_ath['cat_id'] = cat_id
-            df_ath['cat_name'] = df_ath['cat_id'].replace(key_map)
             df_ath = df_ath.astype(str)
-    else:
-        # just return empty datafram
-        df_ath = pd.DataFrame()
-    return df_ath
+        else:
+            # just return empty dataframe
+            df_ath = pd.DataFrame()
+
+        list_df_couples.append(df_ath)
+
+    df_ath_couples = pd.concat(list_df_couples)
+
+    return df_ath_couples
 
 
 def get_event_name(eventid, user, password):
@@ -542,27 +565,39 @@ with st.spinner('Read in data'):
                                    st.secrets['user'],
                                    st.secrets['password'])
 
+
+    df_couples = get_couples(str(sd_key),
+                                   st.secrets['user'],
+                                   st.secrets['password'])
+
+    df_athletes = pd.concat([df_athletes,df_couples])
+
+
+
     list_df_ath = []
 
     if len(df_athletes) > 0:
         df_athletes['cat_id'] = df_athletes['cat_id'].astype(int)
         # select the age divisions you want to seed
         df_athletes['cat_name'] = df_athletes['cat_id'].replace(key_map)
-        with st.expander('Cat_ids without matching name', expanded=False):
-            st.write(df_athletes['cat_id'][df_athletes['cat_id'] == df_athletes['cat_name'] ].unique().tolist())
+
+        if len(df_athletes['cat_id'][df_athletes['cat_id'] == df_athletes['cat_name'] ]) >0:
+            with st.expander('Cat_ids without matching name', expanded=False):
+                st.write(df_athletes['cat_id'][df_athletes['cat_id'] == df_athletes['cat_name'] ].unique().tolist())
+                st.write('If you miss categories in your seeding send mail to sportdirector@jjif.org and mention the above numbers')
 
         df_athletes = df_athletes[df_athletes['cat_id'] != df_athletes['cat_name'] ]
 
         df_athletes['age_division'] = df_athletes['cat_name']
         df_athletes['age_division'] = conv_to_type(df_athletes, 'age_division', AGE_SEL)
 
-
-
         df_athletes['rank_id'] = df_athletes['cat_id'].replace(catID_to_rankID)
         df_athletes = df_athletes.astype(str)
         #remove categories without ranking
-        with st.expander('Categories without ranking list', expanded=False):
-            st.write(df_athletes['cat_name'][df_athletes['cat_id'] == df_athletes['rank_id'] ].unique().tolist())
+        if len(df_athletes['cat_name'][df_athletes['cat_id'] == df_athletes['rank_id'] ]) > 0:
+            with st.expander('Categories without ranking list', expanded=False):
+                st.write(df_athletes['cat_name'][df_athletes['cat_id'] == df_athletes['rank_id'] ].unique().tolist())
+                st.write('If you miss categories in your seeding send mail to sportdirector@jjif.org and mention the above numbers')
 
         df_athletes = df_athletes[df_athletes['cat_id'] != df_athletes['rank_id'] ]
 
@@ -570,6 +605,7 @@ with st.spinner('Read in data'):
         df_athletes = df_athletes[df_athletes['age_division'].isin(age_select)]
 
         # only read in rankings associated to the df_athletes
+        df_athletes = df_athletes.sort_values(by=['cat_name'])
         cat_list = df_athletes['rank_id'].unique()
 
         for j, key in enumerate(cat_list):
@@ -594,6 +630,8 @@ with st.spinner('Read in data'):
 
         df_athletes['name'] = df_athletes['name'].str.upper()
         df_ranking['name'] = df_ranking['name'].str.upper()
+
+
 
         # loop over all ranks to match
         for cat in cat_list:
