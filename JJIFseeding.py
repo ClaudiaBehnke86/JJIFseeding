@@ -348,7 +348,11 @@ def get_couples(eventid, user, password):
 
         list_df_couples.append(df_ath)
 
-    df_ath_couples = pd.concat(list_df_couples)
+    if len(list_df_couples) > 0:
+        df_ath_couples = pd.concat(list_df_couples)
+    else:
+        # just return empty dataframe
+        df_ath_couples = pd.DataFrame()
 
     return df_ath_couples
 
