@@ -674,9 +674,9 @@ with st.spinner('Read in data'):
 
             # Duo names have much lower similarity
             if 'Duo' in name_cat[0]:
-                min_value = 0.25
+                min_value = 0.35
             elif 'Show' in name_cat[0]:
-                min_value = 0.25
+                min_value = 0.35
             else:
                 min_value = 0.55
 
