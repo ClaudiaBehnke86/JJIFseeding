@@ -519,7 +519,7 @@ df_upc = df_upc[~df_upc['name'].str.contains("Referee")]
 df_upc = df_upc[~df_upc['name'].str.contains("Course")]
 df_upc = df_upc[~df_upc['name'].str.contains("REFEREE")]
 
-offmail = ["sportdata@jjif.org","worlds@jjif.org","pesk@adsys.gr" ,"rick.frowyn@jjeu.eu", "office@jjau.org", "mail@jjif.org", "jjif@sportdata.org", "fjjitalia@gmail.com"]
+offmail = ["sportdata@jjif.org","worlds@jjif.org","pesk@adsys.gr" ,"rick.frowyn@jjeu.eu", "office@jjau.org", "mail@jjif.org", "jjif@sportdata.org", "jiujitsucolombia@hotmail.com", "fjjitalia@gmail.com"]
 evts = df_upc['name'][df_upc['contactemail'].isin(offmail)].tolist()
 evts.append('Other')
 option = st.sidebar.selectbox("Choose your event", evts,
