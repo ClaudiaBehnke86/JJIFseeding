@@ -118,7 +118,8 @@ CLUBNAME_COUNTRY_MAP = {"Belgian Ju-Jitsu Federation": 'BEL',
                         "Federaciòn Costarricense de Jiu Jitsu": 'CRC',
                         "Federaciòn Uruguaya de Jiu Jitsu": 'URU',
                         "Asociatiòn Argentina de Jiu Jitsu": 'ARG',
-                        "Bulgarian Ju-Jitsu Federation": 'BUL'
+                        "Bulgarian Ju-Jitsu Federation": 'BUL',
+                        "Bangladesh Ju-Jitsu Association": 'BAN'
                         }
 
 
@@ -193,6 +194,7 @@ def get_matches_df(sparse_matrix, name_vector, top=100):
                          'similarity': similarity_in})
 
 
+@st.cache_data
 def get_participants(eventid, user, password):
     """
     get the athletes form sportdata export to a nice data frame
@@ -277,6 +279,7 @@ def get_participants(eventid, user, password):
 
     return df_out
 
+@st.cache_data
 def get_couples(eventid, user, password):
     """
     get the athletes form sportdata per category & export to a nice data frame
@@ -396,7 +399,7 @@ def get_ranking_cat(user, password):
     dict_ranking = my_series.to_dict()
     return dict_ranking
 
-#@st.cache_data
+@st.cache_data
 def get_ranking(rank_cat_id, max_rank_pos, user, password):
     """
     get the athletes form sportdata per category & export to a nice data frame
@@ -562,18 +565,15 @@ dict_ranking_ids = get_ranking_cat(st.secrets['user'], st.secrets['password'])
 my_bar = st.progress(0)
 with st.spinner('Read in data'):
 
-    df_athletes = get_participants(str(sd_key),
-                                   st.secrets['user'],
-                                   st.secrets['password'])
-
+    df_athletes_in = get_participants(str(sd_key),
+                                      st.secrets['user'],
+                                      st.secrets['password'])
 
     df_couples = get_couples(str(sd_key),
-                                   st.secrets['user'],
-                                   st.secrets['password'])
+                             st.secrets['user'],
+                             st.secrets['password'])
 
-    df_athletes = pd.concat([df_athletes,df_couples])
-
-
+    df_athletes = pd.concat([df_athletes_in,df_couples])
 
     list_df_ath = []
 
@@ -594,7 +594,12 @@ with st.spinner('Read in data'):
 
         df_athletes['rank_id'] = df_athletes['cat_id'].replace(catID_to_rankID)
         df_athletes = df_athletes.astype(str)
-        #remove categories without ranking
+
+        df_athletes = df_athletes[df_athletes['rank_id'] != "NONE"]
+
+
+
+        # remove categories without ranking
         if len(df_athletes['cat_name'][df_athletes['cat_id'] == df_athletes['rank_id'] ]) > 0:
             with st.expander('Categories without ranking list', expanded=False):
                 st.write(df_athletes['cat_name'][df_athletes['cat_id'] == df_athletes['rank_id'] ].unique().tolist())
@@ -632,8 +637,6 @@ with st.spinner('Read in data'):
         df_athletes['name'] = df_athletes['name'].str.upper()
         df_ranking['name'] = df_ranking['name'].str.upper()
 
-
-
         # loop over all ranks to match
         for cat in cat_list:
 
@@ -641,7 +644,6 @@ with st.spinner('Read in data'):
             names_athletes = df_athletes[df_athletes['rank_id'] == cat]['name']
             names_ranking = df_ranking[df_ranking['rank_id'] == cat]['name']
 
-\
             # skip category if empty
             if len(names_athletes) < 1:
                 df_ranking.loc[
@@ -649,7 +651,6 @@ with st.spinner('Read in data'):
                     'similarity'
                 ] = None
                 continue
-
 
             # combine the two lists of names into one list
             all_names = pd.concat([names_athletes, names_ranking]).values
@@ -668,14 +669,14 @@ with st.spinner('Read in data'):
 
             # create a dataframe with the matches
             df_matches = get_matches_df(matches, all_names)
-            name_cat = df_athletes[df_athletes['rank_id'] == cat]['cat_name'].astype(str)
 
+            name_cat = df_athletes[df_athletes["rank_id"] == str(cat)]["cat_name"].tolist()
 
             # Duo names have much lower similarity
-            if "Duo" in name_cat:
-                min_value = 0.35
-            elif "Show" in name_cat:
-                min_value = 0.35
+            if 'Duo' in name_cat[0]:
+                min_value = 0.25
+            elif 'Show' in name_cat[0]:
+                min_value = 0.25
             else:
                 min_value = 0.55
 
@@ -723,7 +724,9 @@ with st.spinner('Read in data'):
                     'similarity'
                 ] = None
 
+
         df_ranking['similarity'] = df_ranking['similarity'].astype(float).fillna(1)
+
         df_all = pd.merge(df_athletes, df_ranking, on=['rank_id', 'name', 'country_code'])
         # new pdf in landscape
 
