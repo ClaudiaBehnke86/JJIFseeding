@@ -612,6 +612,10 @@ with st.spinner('Read in data'):
 
         # only read in rankings associated to the df_athletes
         df_athletes = df_athletes.sort_values(by=['cat_name'])
+        # String comparison does not handle "+"" well... replaced with p in .csv
+        # and here replaced back
+        df_athletes['cat_name'].replace(" p", " +", regex=True, inplace=True)
+
         cat_list = df_athletes['rank_id'].unique()
 
         for j, key in enumerate(cat_list):
