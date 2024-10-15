@@ -311,7 +311,7 @@ def get_couples(eventid, user, password):
         df_ath_couples = pd.DataFrame()
         return df_ath_couples
 
-    duo_ids = ["1491", "1492", 21351, 1490, 1889, 1890, 1891, 1488, 1487, 1489]
+    duo_ids = [1491, 1492, 21351, 1490, 1889, 1890, 1891, 1488, 1487, 1489]
     show_ids =[1494, 1493, 21185, 1495, 1892, 1893, 1894, 1497, 1498, 1496]
 
     couple_ids = duo_ids + show_ids
@@ -573,7 +573,8 @@ with st.spinner('Read in data'):
                              st.secrets['user'],
                              st.secrets['password'])
 
-    df_athletes = pd.concat([df_athletes_in,df_couples])
+
+    df_athletes = pd.concat([df_athletes_in, df_couples])
 
     list_df_ath = []
 
@@ -581,7 +582,6 @@ with st.spinner('Read in data'):
         df_athletes['cat_id'] = df_athletes['cat_id'].astype(int)
         # select the age divisions you want to seed
         df_athletes['cat_name'] = df_athletes['cat_id'].replace(key_map)
-
         if len(df_athletes['cat_id'][df_athletes['cat_id'] == df_athletes['cat_name'] ]) >0:
             with st.expander('Cat_ids without matching name', expanded=False):
                 st.write(df_athletes['cat_id'][df_athletes['cat_id'] == df_athletes['cat_name'] ].unique().tolist())
@@ -597,8 +597,6 @@ with st.spinner('Read in data'):
 
         df_athletes = df_athletes[df_athletes['rank_id'] != "NONE"]
 
-
-
         # remove categories without ranking
         if len(df_athletes['cat_name'][df_athletes['cat_id'] == df_athletes['rank_id'] ]) > 0:
             with st.expander('Categories without ranking list', expanded=False):
@@ -609,6 +607,7 @@ with st.spinner('Read in data'):
 
         # remove what is not selected
         df_athletes = df_athletes[df_athletes['age_division'].isin(age_select)]
+
 
         # only read in rankings associated to the df_athletes
         df_athletes = df_athletes.sort_values(by=['cat_name'])
@@ -727,7 +726,6 @@ with st.spinner('Read in data'):
                     df_ranking['rank_id'] == cat,
                     'similarity'
                 ] = None
-
 
         df_ranking['similarity'] = df_ranking['similarity'].astype(float).fillna(1)
 
