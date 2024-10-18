@@ -225,7 +225,11 @@ def get_participants(eventid, user, password):
         return df_out
 
     # drop rows that have no 'categories' (e.g. VIP's)
-    df_out.dropna(inplace=True, subset="categories")
+    if 'categories' in df_out.columns:
+        df_out.dropna(inplace=True, subset="categories")
+    else:
+        return pd.DataFrame()
+
     # create a temporary column that counts how many categories an athlete has
     # participated in
     df_out["no_of_categories"] = df_out["categories"].apply(lambda x: len(x))
@@ -279,6 +283,7 @@ def get_participants(eventid, user, password):
     del df_out["sex"]
 
     return df_out
+
 
 @st.cache_data
 def get_couples(eventid, user, password):
@@ -400,6 +405,7 @@ def get_ranking_cat(user, password):
     dict_ranking = my_series.to_dict()
     return dict_ranking
 
+
 @st.cache_data
 def get_ranking(rank_cat_id, max_rank_pos, user, password):
     """
@@ -510,7 +516,7 @@ st.sidebar.image("https://i0.wp.com/jjeu.eu/wp-content/uploads/2018/08/jjif-logo
 # get upcoming events
 uri_upc = "https://www.sportdata.org/ju-jitsu/rest/events/upcoming/"
 
-#read in categories
+# read in categories
 response = requests.get(uri_upc, auth=HTTPBasicAuth(st.secrets['user'], st.secrets['password']), timeout=5)
 d_upc = response.json()
 df_upc = json_normalize(d_upc)
@@ -574,11 +580,19 @@ with st.spinner('Read in data'):
                              st.secrets['user'],
                              st.secrets['password'])
 
-    df_athletes = pd.concat([df_athletes_in, df_couples])
+    if(len(df_athletes_in) > 0 and len(df_couples) >0):
+        df_athletes = pd.concat([df_athletes_in, df_couples])
+    elif len(df_athletes_in) > 0:
+        df_athletes = df_athletes_in
+    elif len(df_couples) > 0:
+        df_athletes = df_couples
+    else:
+        df_athletes = []
 
     list_df_ath = []
 
     if len(df_athletes) > 0:
+        df_athletes.dropna(inplace=True, subset="cat_id")
         df_athletes['cat_id'] = df_athletes['cat_id'].astype(int)
         # select the age divisions you want to seed
         df_athletes['cat_name'] = df_athletes['cat_id'].replace(key_map)
@@ -608,7 +622,6 @@ with st.spinner('Read in data'):
         # remove what is not selected
         df_athletes = df_athletes[df_athletes['age_division'].isin(age_select)]
 
-
         # only read in rankings associated to the df_athletes
         df_athletes = df_athletes.sort_values(by=['cat_name'])
         # String comparison does not handle "+"" well... replaced with p in .csv
@@ -624,181 +637,185 @@ with st.spinner('Read in data'):
                                       st.secrets['password'])
             list_df_ranking.append(ranking_cat)
             my_bar.progress(0.5+((j+1)/len(cat_list))/2)
-        df_ranking = pd.concat(list_df_ranking)
-        df_ranking['rank_id'] = df_ranking['cat_id']
-
-        vectorizer = TfidfVectorizer(min_df=1, analyzer=ngrams)
 
         with st.expander('Details on name matching', expanded=False):
             st.write('Similar names were matched to avoid missing mapping. This is based on:')
             st.write('https://towardsdatascience.com/surprisingly-effective-way-to-name-matching-in-python-1a67328e670e')
 
-        # create dummy column for similarity score
-        df_ranking['similarity'] = df_ranking['name']
-        df_ranking['original_name'] = ''
+        if len(list_df_ranking) > 0:
+            df_ranking = pd.concat(list_df_ranking)
 
-        df_athletes['name'] = df_athletes['name'].str.upper()
-        df_ranking['name'] = df_ranking['name'].str.upper()
+            df_ranking['rank_id'] = df_ranking['cat_id']
 
-        # loop over all ranks to match
-        for cat in cat_list:
+            vectorizer = TfidfVectorizer(min_df=1, analyzer=ngrams)
 
-            # get the names of from leading dataframe (athletes) and ranking frame
-            names_athletes = df_athletes[df_athletes['rank_id'] == cat]['name']
-            names_ranking = df_ranking[df_ranking['rank_id'] == cat]['name']
+            # create dummy column for similarity score
+            df_ranking['similarity'] = df_ranking['name']
+            df_ranking['original_name'] = ''
 
-            # skip category if empty
-            if len(names_athletes) < 1:
-                df_ranking.loc[
-                    df_ranking['rank_id'] == cat,
-                    'similarity'
-                ] = None
-                continue
+            df_athletes['name'] = df_athletes['name'].str.upper()
+            df_ranking['name'] = df_ranking['name'].str.upper()
 
-            # combine the two lists of names into one list
-            all_names = pd.concat([names_athletes, names_ranking]).values
-            # perform matching over combined name list
+            # loop over all ranks to match
+            for cat in cat_list:
 
-            matrix = vectorizer.fit_transform(all_names)
-            if len(all_names) > 4:
-                matches = sp_matmul_topn(matrix,
-                                         matrix.transpose(),
-                                         top_n=9, threshold=0.3, sort=True)
+                # get the names of from leading dataframe (athletes) and ranking frame
+                names_athletes = df_athletes[df_athletes['rank_id'] == cat]['name']
+                names_ranking = df_ranking[df_ranking['rank_id'] == cat]['name']
 
-            else:
-                matches = sp_matmul_topn(matrix,
-                                         matrix.transpose(),
-                                         top_n=4, threshold=0.4, sort=True)
+                # skip category if empty
+                if len(names_athletes) < 1:
+                    df_ranking.loc[
+                        df_ranking['rank_id'] == cat,
+                        'similarity'
+                    ] = None
+                    continue
 
-            # create a dataframe with the matches
-            df_matches = get_matches_df(matches, all_names)
+                # combine the two lists of names into one list
+                all_names = pd.concat([names_athletes, names_ranking]).values
+                # perform matching over combined name list
 
-            name_cat = df_athletes[df_athletes["rank_id"] == str(cat)]["cat_name"].tolist()
+                matrix = vectorizer.fit_transform(all_names)
+                if len(all_names) > 4:
+                    matches = sp_matmul_topn(matrix,
+                                             matrix.transpose(),
+                                             top_n=9, threshold=0.3, sort=True)
 
-            st.write(df_matches)
-
-            # Duo names have much lower similarity
-            if 'Duo' in name_cat[0]:
-                min_value = 0.25
-            elif 'Show' in name_cat[0]:
-                min_value = 0.25
-            else:
-                min_value = 0.55
-
-            # remove self-mapping of names (exact matches)
-            df_matches = df_matches[
-                (df_matches["similarity"] < .99999999) & (
-                    df_matches["similarity"] > min_value)
-            ]
-            # create mapping dictionary for names
-            dict_map = dict(zip(df_matches.left_side, df_matches.right_side))
-
-            # if approximate matches are found, replace the names
-            if len(dict_map) > 0:
-                # drop all keys in the mapping dict that do not have a value
-                # that appears in the athletes names. by doing this, you
-                # avoid replacing names in the ranking list with other names
-                # in the ranking list, which would potentially lead to mis-
-                # matches with athlete names
-                slim_dict = {key: value for key,
-                    value in dict_map.items() if value in df_athletes[
-                        df_athletes['rank_id'] == cat
-                    ]['name'].values
-                }
-                similarity_dict = {
-                    key: df_matches[
-                        df_matches["right_side"] == key
-                    ]['similarity'].values[0] for key, value in slim_dict.items()
-                }
-                # replace names in the ranking data
-                df_ranking.loc[
-                    df_ranking['rank_id'] == cat,
-                    'similarity'
-                ] = df_ranking[df_ranking['rank_id'] == cat]['similarity'].apply(lambda x:  similarity_dict.get(x))
-                df_ranking.loc[
-                    df_ranking['rank_id'] == cat,
-                    'original_name'
-                ] = df_ranking[df_ranking['rank_id'] == cat]['name'].apply(lambda x:  x if slim_dict.get(x) else None)
-                df_ranking.loc[
-                    df_ranking['rank_id'] == cat,
-                    'name'
-                ] = df_ranking[df_ranking['rank_id'] == cat]['name'].replace(slim_dict)
-            else:
-                df_ranking.loc[
-                    df_ranking['rank_id'] == cat,
-                    'similarity'
-                ] = None
-
-        df_ranking['similarity'] = df_ranking['similarity'].astype(float).fillna(1)
-
-        df_all = pd.merge(df_athletes, df_ranking, on=['rank_id', 'name', 'country_code'])
-        # new pdf in landscape
-
-        pdf = PDF('L', tourname)
-
-        cat_list_str = df_athletes['cat_name'].unique()
-
-        for k in cat_list_str:
-            pdf.add_page()
-            pdf.alias_nb_pages()
-            pdf.set_font("Arial", size=20)
-            pdf.cell(200, 20, txt="Seeding for Category " + k, ln=1, align='C')
-
-            st.header(k)
-
-            if(len(df_athletes[df_athletes['cat_name'] == str(k)])<= 1):
-                st.info("Less than two athletes in category", icon="🚨")
-            elif len(df_all[(df_all['cat_name'] == str(k))]) <= 0:
-                st.success("No one is in seeding", icon="ℹ️")
-            else:
-                names_seeding = df_all[['name', 'country_code', 'ranking', 'totalpoints', 'similarity', 'original_name']][(df_all['cat_name'] == str(k))]
-                names_seeding['ranking'] = names_seeding['ranking'].astype(int)
-                names_seeding = names_seeding.sort_values(by=['ranking'], ascending=True)
-                names_seeding['position'] = list(range(1, len(names_seeding.index)+1))
-
-                # move positions to first column
-                cols = names_seeding.columns.tolist()
-                cols = cols[-1:] + cols[:-1]
-                names_seeding = names_seeding[cols]
-
-                # remove more than 4 seeded people
-                names_seeding = names_seeding[names_seeding['position'] < 5]
-                names_seeding = names_seeding.astype(str)
-
-                if len(names_seeding) > 0:
-                    if names_seeding[names_seeding["similarity"].astype(float) < 1.0].empty:
-                        st.write(names_seeding[['name', 'country_code', 'ranking', 'totalpoints']])
-                    else:
-                        st.warning('There are non exact matches, check names and original_name', icon="⚠️")
-                        names_seeding["similarity"] = names_seeding["similarity"].astype(float).round(2)
-                        st.dataframe(names_seeding.style.highlight_between(subset=['similarity'], left=0.1, right=0.99, color="#F31C2B"))
-
-                        names_seeding = names_seeding.astype(str)
-                        pdf.cell(200, 20, txt='!!! There are non exact matches, check names in event and ranking', ln=1, align='C')
-
-                    if len(names_seeding['totalpoints'].unique())<len(names_seeding['totalpoints']):
-                        st.error('Athletes have the same number of points, please make a pre-draw', icon="🚨")
-                        pdf.cell(200, 20, txt='!!! Athletes have the same number of points, please make a pre-draw', ln=1, align='C')
-
-                    fig = draw_as_table(names_seeding)
-                    PNG_NAME = str(k) + ".png"
-                    fig.write_image(PNG_NAME)
-                    pdf.image(PNG_NAME)
-                    os.remove(PNG_NAME)
                 else:
-                    st.write("No one in Seeding")
-                    pdf.set_font("Arial", size=15)
-                    pdf.cell(200, 20, txt="No one in Seeding", ln=1, align='L')
+                    matches = sp_matmul_topn(matrix,
+                                             matrix.transpose(),
+                                             top_n=4, threshold=0.4, sort=True)
 
-        pdf.output("dummy2.pdf")
-        with open("dummy2.pdf", "rb") as pdf_file:
-            PDFbyte2 = pdf_file.read()
+                # create a dataframe with the matches
+                df_matches = get_matches_df(matches, all_names)
 
-        fname = tourname + ' Seeding.pdf'
-        st.download_button(label="Download Seeding",
-                           data=PDFbyte2,
-                           file_name=(fname))
-        os.remove("dummy2.pdf")
+                name_cat = df_athletes[df_athletes["rank_id"] == str(cat)]["cat_name"].tolist()
+
+                # Duo names have much lower similarity
+                if 'Duo' in name_cat[0]:
+                    min_value = 0.35
+                elif 'Show' in name_cat[0]:
+                    min_value = 0.35
+                else:
+                    min_value = 0.55
+
+                # remove self-mapping of names (exact matches)
+                df_matches = df_matches[
+                    (df_matches["similarity"] < .99999999) & (
+                        df_matches["similarity"] > min_value)
+                ]
+                # create mapping dictionary for names
+                dict_map = dict(zip(df_matches.left_side, df_matches.right_side))
+
+                # if approximate matches are found, replace the names
+                if len(dict_map) > 0:
+                    # drop all keys in the mapping dict that do not have a value
+                    # that appears in the athletes names. by doing this, you
+                    # avoid replacing names in the ranking list with other names
+                    # in the ranking list, which would potentially lead to mis-
+                    # matches with athlete names
+                    slim_dict = {key: value for key,
+                        value in dict_map.items() if value in df_athletes[
+                            df_athletes['rank_id'] == cat
+                        ]['name'].values
+                    }
+                    similarity_dict = {
+                        key: df_matches[
+                            df_matches["right_side"] == key
+                        ]['similarity'].values[0] for key, value in slim_dict.items()
+                    }
+                    # replace names in the ranking data
+                    df_ranking.loc[
+                        df_ranking['rank_id'] == cat,
+                        'similarity'
+                    ] = df_ranking[df_ranking['rank_id'] == cat]['similarity'].apply(lambda x:  similarity_dict.get(x))
+                    df_ranking.loc[
+                        df_ranking['rank_id'] == cat,
+                        'original_name'
+                    ] = df_ranking[df_ranking['rank_id'] == cat]['name'].apply(lambda x:  x if slim_dict.get(x) else None)
+                    df_ranking.loc[
+                        df_ranking['rank_id'] == cat,
+                        'name'
+                    ] = df_ranking[df_ranking['rank_id'] == cat]['name'].replace(slim_dict)
+                else:
+                    df_ranking.loc[
+                        df_ranking['rank_id'] == cat,
+                        'similarity'
+                    ] = None
+
+            df_ranking['similarity'] = df_ranking['similarity'].astype(float).fillna(1)
+
+            df_all = pd.merge(df_athletes, df_ranking, on=['rank_id', 'name', 'country_code'])
+            # new pdf in landscape
+
+            pdf = PDF('L', tourname)
+
+            cat_list_str = df_athletes['cat_name'].unique()
+
+            for k in cat_list_str:
+                pdf.add_page()
+                pdf.alias_nb_pages()
+                pdf.set_font("Arial", size=20)
+                pdf.cell(200, 20, txt="Seeding for Category " + k, ln=1, align='C')
+
+                st.header(k)
+
+                if(len(df_athletes[df_athletes['cat_name'] == str(k)])<= 1):
+                    st.info("Less than two athletes in category", icon="🚨")
+                elif len(df_all[(df_all['cat_name'] == str(k))]) <= 0:
+                    st.success("No one is in seeding", icon="ℹ️")
+                else:
+                    names_seeding = df_all[['name', 'country_code', 'ranking', 'totalpoints', 'similarity', 'original_name']][(df_all['cat_name'] == str(k))]
+                    names_seeding['ranking'] = names_seeding['ranking'].astype(int)
+                    names_seeding = names_seeding.sort_values(by=['ranking'], ascending=True)
+                    names_seeding['position'] = list(range(1, len(names_seeding.index)+1))
+
+                    # move positions to first column
+                    cols = names_seeding.columns.tolist()
+                    cols = cols[-1:] + cols[:-1]
+                    names_seeding = names_seeding[cols]
+
+                    # remove more than 4 seeded people
+                    names_seeding = names_seeding[names_seeding['position'] < 5]
+                    names_seeding = names_seeding.astype(str)
+
+                    if len(names_seeding) > 0:
+                        if names_seeding[names_seeding["similarity"].astype(float) < 1.0].empty:
+                            st.write(names_seeding[['name', 'country_code', 'ranking', 'totalpoints']])
+                        else:
+                            st.warning('There are non exact matches, check names and original_name', icon="⚠️")
+                            names_seeding["similarity"] = names_seeding["similarity"].astype(float).round(2)
+                            st.dataframe(names_seeding.style.highlight_between(subset=['similarity'], left=0.1, right=0.99, color="#F31C2B"))
+
+                            names_seeding = names_seeding.astype(str)
+                            pdf.cell(200, 20, txt='!!! There are non exact matches, check names in event and ranking', ln=1, align='C')
+
+                        if len(names_seeding['totalpoints'].unique())<len(names_seeding['totalpoints']):
+                            st.error('Athletes have the same number of points, please make a pre-draw', icon="🚨")
+                            pdf.cell(200, 20, txt='!!! Athletes have the same number of points, please make a pre-draw', ln=1, align='C')
+
+                        fig = draw_as_table(names_seeding)
+                        PNG_NAME = str(k) + ".png"
+                        fig.write_image(PNG_NAME)
+                        pdf.image(PNG_NAME)
+                        os.remove(PNG_NAME)
+                    else:
+                        st.write("No one in Seeding")
+                        pdf.set_font("Arial", size=15)
+                        pdf.cell(200, 20, txt="No one in Seeding", ln=1, align='L')
+
+            pdf.output("dummy2.pdf")
+            with open("dummy2.pdf", "rb") as pdf_file:
+                PDFbyte2 = pdf_file.read()
+
+            fname = tourname + ' Seeding.pdf'
+            st.download_button(label="Download Seeding",
+                               data=PDFbyte2,
+                               file_name=(fname))
+            os.remove("dummy2.pdf")
+
+        else:
+            st.error("The event has no ranking categories, use a different event")
 
     else:
         st.error("The event has no categories, use a different event")
