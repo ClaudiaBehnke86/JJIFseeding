@@ -98,6 +98,7 @@ BASEURI = "https://www.sportdata.org/ju-jitsu/rest/"
 CLUBNAME_COUNTRY_MAP = {"Belgian Ju-Jitsu Federation": 'BEL',
                         "Deutscher Ju-Jitsu Verband e.V.": 'GER',
                         "Federazione Ju Jitsu Italia": 'ITA',
+                        "Team Italia":'ITA',
                         "Romanian Martial Arts Federation": 'ROU',
                         "Österreichischer Jiu Jitsu Verband": "AUT",
                         "Taiwan Ju Jitsu Federation": "TPE",
@@ -573,7 +574,6 @@ with st.spinner('Read in data'):
                              st.secrets['user'],
                              st.secrets['password'])
 
-
     df_athletes = pd.concat([df_athletes_in, df_couples])
 
     list_df_ath = []
@@ -675,11 +675,13 @@ with st.spinner('Read in data'):
 
             name_cat = df_athletes[df_athletes["rank_id"] == str(cat)]["cat_name"].tolist()
 
+            st.write(df_matches)
+
             # Duo names have much lower similarity
             if 'Duo' in name_cat[0]:
-                min_value = 0.35
+                min_value = 0.25
             elif 'Show' in name_cat[0]:
-                min_value = 0.35
+                min_value = 0.25
             else:
                 min_value = 0.55
 
