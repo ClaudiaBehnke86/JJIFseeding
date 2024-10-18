@@ -106,7 +106,9 @@ CLUBNAME_COUNTRY_MAP = {"Belgian Ju-Jitsu Federation": 'BEL',
                         "Federation Française de Judo, Jujitsu, Kendo et DA": 'FRA',
                         "Pakistan Ju-Jitsu Federation": 'PAK',
                         "Vietnam Jujitsu Federation": 'VIE',
-                        "Ju-Jitsu Federation of Slovenia": 'SLO',
+                        "Judo Bond Nederland":"NED",
+                        "Polish Sport Ju-Jitsu Association":"POL",
+                        "Ju-Jitsu Federation of Slovenia":'SLO',
                         "Hellenic Ju-Jitsu Federation": 'GRE',
                         "Ju Jitsu Association of Thailand": 'THA',
                         "FÉDÉRATION ROYALE MAROCAINE DE JU-JITSU ": 'MAR',
@@ -341,6 +343,12 @@ def get_couples(eventid, user, password):
             # for an unclear reason teams to no have a country code...
             # convert club name to country using dict...
             df_out['country_code'] = df_out['club_name'].replace(CLUBNAME_COUNTRY_MAP)
+
+            df_err = df_out.loc[df_out['country_code'].str.len() > 3]
+            if len(df_err) > 0:
+                st.error("There are non converted club names")
+                st.write("send e-mail to sportdirector@jjif.org with the following details:")
+                st.write(df_out.loc[df_out['country_code'].str.len()> 3])
             df_out['name'] = df_out['name'].str.split('(').str[1]
             df_out['name'] = df_out['name'].str.split(')').str[0]
             df_out['name'].replace(",", " ", regex=True, inplace=True)
