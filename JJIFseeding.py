@@ -269,6 +269,10 @@ def get_participants(eventid, user, password):
     # fit names to right formate
     df_out['name'] = df_out['first'] + " " + df_out['last']
 
+    # clean up leading & trailing whitespaces and remove double
+    df_out['name'].replace(r"^ +| +$", r"", regex=True, inplace=True)
+    df_out['name'].replace("  ", " ", regex=True, inplace=True)
+
     # clean up unused and temporary columns
     del df_out["categories"]
     del df_out["categories_unique"]
