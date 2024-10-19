@@ -699,19 +699,24 @@ with st.spinner('Read in data'):
 
                 name_cat = df_athletes[df_athletes["rank_id"] == str(cat)]["cat_name"].tolist()
 
+
                 # Duo names have much lower similarity
                 if 'Duo' in name_cat[0]:
                     min_value = 0.35
                 elif 'Show' in name_cat[0]:
                     min_value = 0.35
                 else:
-                    min_value = 0.55
+                    min_value = 0.60
 
                 # remove self-mapping of names (exact matches)
                 df_matches = df_matches[
                     (df_matches["similarity"] < .99999999) & (
                         df_matches["similarity"] > min_value)
                 ]
+
+                # sort by similarity to make sure the dic takes the right person
+                df_matches = df_matches.sort_values(by=['similarity'])
+
                 # create mapping dictionary for names
                 dict_map = dict(zip(df_matches.left_side, df_matches.right_side))
 
@@ -732,6 +737,7 @@ with st.spinner('Read in data'):
                             df_matches["right_side"] == key
                         ]['similarity'].values[0] for key, value in slim_dict.items()
                     }
+
                     # replace names in the ranking data
                     df_ranking.loc[
                         df_ranking['rank_id'] == cat,
