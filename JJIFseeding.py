@@ -710,7 +710,7 @@ with st.spinner('Read in data'):
                 elif 'Show' in name_cat[0]:
                     min_value = 0.35
                 else:
-                    min_value = 0.60
+                    min_value = 0.45
 
                 # remove self-mapping of names (exact matches)
                 df_matches = df_matches[
