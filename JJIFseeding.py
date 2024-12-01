@@ -106,7 +106,7 @@ CLUBNAME_COUNTRY_MAP = {"Belgian Ju-Jitsu Federation": 'BEL',
                         "Federation Française de Judo, Jujitsu, Kendo et DA": 'FRA',
                         "Pakistan Ju-Jitsu Federation": 'PAK',
                         "Vietnam Jujitsu Federation": 'VIE',
-                        "Judo Bond Nederland":"NED",
+                        "Judo Bond Nederland": "NED",
                         "Polish Sport Ju-Jitsu Association":"POL",
                         "Ju-Jitsu Federation of Slovenia":'SLO',
                         "Hellenic Ju-Jitsu Federation": 'GRE',
@@ -122,7 +122,8 @@ CLUBNAME_COUNTRY_MAP = {"Belgian Ju-Jitsu Federation": 'BEL',
                         "Federaciòn Uruguaya de Jiu Jitsu": 'URU',
                         "Asociatiòn Argentina de Jiu Jitsu": 'ARG',
                         "Bulgarian Ju-Jitsu Federation": 'BUL',
-                        "Bangladesh Ju-Jitsu Association": 'BAN'
+                        "Bangladesh Ju-Jitsu Association": 'BAN',
+                        "TUNISIAN JUJITSU FEDERATION": 'TUN'
                         }
 
 
@@ -653,6 +654,12 @@ with st.spinner('Read in data'):
         with st.expander('Details on name matching', expanded=False):
             st.write('Similar names were matched to avoid missing mapping. This is based on:')
             st.write('https://towardsdatascience.com/surprisingly-effective-way-to-name-matching-in-python-1a67328e670e')
+            col1, col2 = st.columns(2)
+            with col1:
+                min_team = st.number_input("Minimum value of similarity for Duo/Show", value=0.35, min_value=0.01, max_value=0.99)
+            with col2:
+                min_indi = st.number_input("Minimum value of similarity for individuals", value=0.55, min_value=0.01, max_value=0.99)
+            st.warning("increase number means making the name matching stronger, decrease allows more fuzzy matches")
 
         if len(list_df_ranking) > 0:
             df_ranking = pd.concat(list_df_ranking)
@@ -706,11 +713,11 @@ with st.spinner('Read in data'):
 
                 # Duo names have much lower similarity
                 if 'Duo' in name_cat[0]:
-                    min_value = 0.35
+                    min_value = min_team
                 elif 'Show' in name_cat[0]:
-                    min_value = 0.35
+                    min_value = min_team
                 else:
-                    min_value = 0.45
+                    min_value = min_indi
 
                 # remove self-mapping of names (exact matches)
                 df_matches = df_matches[
